@@ -3442,7 +3442,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'vplay') S.vp = k;
   else if (a === 'anim') { Anim.setPlaying(!Anim.isPlaying()); document.querySelectorAll('.figbox').forEach(function (f) { f.classList.toggle('paused', !Anim.isPlaying()); }); }
   else if (a === 'addx') { var xi = S.xtra.indexOf(k); if (xi >= 0) S.xtra.splice(xi, 1); else S.xtra.push(k); }
-  else if (a === 'start') startWorkout();
+  else if (a === 'start') { startWorkout(); window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); }
   else if (a === 'wset') { var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok) S.active.lastOk = Date.now(); S.wmsg = null; saveActive(); }
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
   else if (a === 'why') S.wy = S.wy === k ? null : k;
