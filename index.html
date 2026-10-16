@@ -86,7 +86,7 @@ h2 { font: 800 22px/1.1 var(--f-display); letter-spacing: .03em; text-transform:
 
 nav.tabs {
   background: var(--bg); border-bottom: 1px solid var(--line);
-  display: grid; grid-template-columns: repeat(6, 1fr); gap: 0;
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); gap: 2px;
   padding: 4px max(8px, env(safe-area-inset-right, 0px)) 4px max(8px, env(safe-area-inset-left, 0px));
 }
 nav.tabs:empty { display: none; }
@@ -678,6 +678,36 @@ function nutrition(p, dayType, variants) {
   };
 }
 
+
+/* semaine type : jours d'entraînement répartis sur 7 jours, un menu par jour */
+var DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
+var TRAIN_DAYS = { 3: [0, 2, 4], 4: [0, 1, 3, 4], 5: [0, 1, 2, 4, 5] };
+var BIG = ['Quadriceps', 'Ischios', 'Fessiers', 'Dos'];
+function weekMenu(p, avoid) {
+  var plan = weekPlan(p, { avoid: avoid }), pos = TRAIN_DAYS[plan.length] || TRAIN_DAYS[3], k = 0;
+  return DAYS.map(function (name, d) {
+    var ti = pos.indexOf(d), dt = 'rest', sess = null;
+    if (ti >= 0) { sess = plan[ti]; dt = sess.some(function (m) { return BIG.indexOf(m) >= 0; }) ? 'heavy' : 'light'; }
+    var n = nutrition(p, dt, { pdj: d, dej: d, col: d + 1, din: d + 2 });
+    return { name: name, dayType: dt, sess: sess, n: n };
+  });
+}
+var CAT = { poulet: 'p', thon: 'p', oeufs: 'p', skyr: 'p', fb: 'p', saumon: 'p', boeuf: 'p', tofu: 'p', jambon: 'p', whey: 'p', lait: 'p',
+  avoine: 'f', pain: 'f', riz: 'f', pates: 'f', pdt: 'f', patate: 'f', quinoa: 'f', lentilles: 'f',
+  banane: 'v', pomme: 'v', rouges: 'v', legumes: 'v', salade: 'v', huile: 'g', amandes: 'g', cacahuete: 'g', avocat: 'g' };
+function shopping(week) {
+  var tot = {}; week.forEach(function (d) { d.n.meals.forEach(function (m) { m.items.forEach(function (i) { tot[i.k] = (tot[i.k] || 0) + i.q; }); }); });
+  var out = { p: [], f: [], v: [], g: [] };
+  Object.keys(tot).forEach(function (k) {
+    var f = FOOD[k], q = Math.round(tot[k] / 10) * 10 || 10, u = f.u, txt;
+    if (u) { var c = Math.round(tot[k] / u[2]); txt = c + ' ' + (c > 1 ? u[1] : u[0]); }
+    else txt = q >= 1000 ? String(Math.round(q / 100) / 10).replace('.', ',') + ' kg' : q + (k === 'lait' ? ' ml' : ' g');
+    out[CAT[k] || 'g'].push({ n: u && k !== 'whey' ? '' : f.n.replace(/ \(ml\)$/, ''), txt: txt, q: tot[k] });
+  });
+  Object.keys(out).forEach(function (c) { out[c].sort(function (a, b) { return b.q - a.q; }); });
+  return out;
+}
+
 /* ---------- recommandation ---------- */
 function incFor(X, now) {
   var ws = {};
@@ -921,7 +951,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, weekPlan: weekPlan, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, weekPlan: weekPlan, weekMenu: weekMenu, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -1565,6 +1595,8 @@ var TABS = [
   ['repas', 'Repas', '<path d="M7 3v8a2 2 0 002 2v8M11 3v8a2 2 0 01-2 2M17 3c-2 2-2.5 5-2.5 8H17v10"/>'],
   ['data', 'Données', '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>']
 ];
+var AI_ON = false; /* coach IA : mettre true une fois la clé configurée sur Netlify */
+TABS = TABS.filter(function (t) { return t[0] !== 'coach' || AI_ON; });
 var seedCSV = $('seed').textContent, model, S = { fresh: false, onb: null, pf: {}, pfErr: null, home: true, tab: 'seance', sel: null, done: {}, open: null, range: 180, q: '', mf: 'Tous', msg: null, fiche: null, sf: null, xk: null, hs: null, hn: 10, wf: null, xtra: [] };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
@@ -1855,7 +1887,65 @@ function dayTypeAuto() {
   if (!S.sel || !S.sel.length) return 'rest';
   return S.sel.some(function (m) { return ['Quadriceps', 'Ischios', 'Fessiers', 'Dos'].indexOf(m) >= 0; }) ? 'heavy' : 'light';
 }
+
 function viewRepas() {
+  var p = prof();
+  if (!p) return viewRepasJour();
+  var rt = S.rt || 'jour', T = [['jour', 'Aujourd\'hui'], ['semaine', 'Semaine'], ['courses', 'Courses'], ['conseils', 'Conseils']];
+  var tabs = '<div class="chips">' + T.map(function (t) { return '<button class="chip' + (rt === t[0] ? ' go' : '') + '" data-act="rt" data-v="' + t[0] + '" aria-pressed="' + (rt === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>';
+  var body = rt === 'semaine' ? viewRepasSemaine(p) : rt === 'courses' ? viewRepasCourses(p) : rt === 'conseils' ? viewRepasConseils(p) : viewRepasJour();
+  return '<section class="sec">' + tabs + '</section>' + body;
+}
+var DTL = { heavy: 'séance lourde', light: 'séance légère', rest: 'repos' };
+function viewRepasSemaine(p) {
+  var wk = C.weekMenu(p, injured()), nf = function (x) { return x.toLocaleString('fr-FR'); };
+  return '<section class="sec"><div><h2>Ta semaine</h2><p class="sub">Un menu par jour, calé sur tes séances types : plus de glucides les jours d\'entraînement, un peu moins au repos. Les menus changent chaque jour pour varier.</p></div>' +
+    wk.map(function (d) {
+      return '<article class="card"><div class="row"><div><div class="lab">' + d.name + ' · ' + DTL[d.dayType] + '</div><div class="ename">' + (d.sess ? esc(d.sess.join(' + ')) : 'Jour de repos') + '</div></div><div class="mono">' + nf(d.n.kcal) + ' kcal</div></div>' +
+        '<ul class="how">' + d.n.meals.map(function (m) { return '<li><b>' + esc(m.label.replace(' ou après la séance', '')) + '</b> : ' + esc(m.t) + '</li>'; }).join('') + '</ul></article>';
+    }).join('') + '<p class="legend">Les quantités exactes d\'un jour se voient dans l\'onglet « Aujourd\'hui ». Les jours d\'entraînement suivent l\'ordre de ton programme de la semaine : décale-les selon ton emploi du temps.</p></section>';
+}
+function viewRepasCourses(p) {
+  var sh = C.shopping(C.weekMenu(p, injured())), G = [['p', 'Protéines et produits laitiers'], ['f', 'Féculents'], ['v', 'Fruits et légumes'], ['g', 'Matières grasses']];
+  return '<section class="sec"><div><h2>Liste de courses</h2><p class="sub">Pour la semaine type, 7 jours, une personne.</p></div>' +
+    G.map(function (g) {
+      return sh[g[0]].length ? '<div class="card"><div class="lab">' + g[1] + '</div><ul class="how">' + sh[g[0]].map(function (i) { return '<li>' + esc(i.txt) + (i.n ? ' · ' + esc(i.n.toLowerCase()) : '') + '</li>'; }).join('') + '</ul></div>' : '';
+    }).join('') +
+    '<p class="legend">Les féculents (riz, pâtes, pommes de terre, lentilles, quinoa) et les viandes sont comptés cuits. Pour le riz et les pâtes, achète environ 2,5 fois moins de produit sec que le poids cuit ; pour la viande, environ 1,3 fois plus de cru que de cuit. Les quantités sont arrondies : ajuste selon ce que tu as déjà.</p></section>';
+}
+function viewRepasConseils(p) {
+  var g = p.goal, kc = C.nutrition(p, 'rest').kcal;
+  var P = g === 'perte' ? [
+    ['Le principe', 'Un déficit modéré, d\'environ 15 à 20 % sous tes besoins, avec beaucoup de protéines et de légumes. Perdre 0,25 à 0,75 kg par semaine suffit : plus vite, tu perds du muscle et tu craques plus souvent.'],
+    ['Ce qui marche', 'Protéines à chaque repas, légumes ou crudités en grande quantité (ça cale pour peu de calories), féculents en portion mesurée, eau avant les repas, 7 à 9 h de sommeil et 7 000 à 10 000 pas par jour.'],
+    ['Gérer la faim', 'Mange lentement, garde une collation protéinée (skyr, fromage blanc, jambon) pour l\'après-midi, et prévois un repas plaisir dans la semaine plutôt que de tout interdire.'],
+    ['Si la balance stagne', 'Attends 2 à 3 semaines (moyenne de tes pesées), vérifie les portions et les « extras » (huile, boissons, grignotages), puis baisse de 100 à 150 kcal ou ajoute de la marche. Prévois une semaine à calories d\'entretien toutes les 8 à 12 semaines.']
+  ] : g === 'muscle' ? [
+    ['Le principe', 'Un léger surplus, d\'environ 5 à 10 % au-dessus de tes besoins, avec 1,6 à 2 g de protéines par kilo. Viser 0,25 à 0,5 kg par semaine limite la prise de gras.'],
+    ['Ce qui marche', 'Des repas réguliers, des glucides autour de la séance (énergie et récupération), des protéines à chaque repas, assez de lipides de bonne qualité (huile d\'olive, noix, poissons gras) et un sommeil suffisant.'],
+    ['Si tu as peu d\'appétit', 'Ajoute des calories « faciles » : flocons d\'avoine, lait, fruits secs, beurre de cacahuète, huile d\'olive sur les plats. Les boissons caloriques aident aussi.'],
+    ['Si la balance ne bouge pas', 'Après 2 à 3 semaines sans prise alors que tes charges stagnent, ajoute 150 à 250 kcal, surtout en glucides. Si tu prends plus de 0,5 kg par semaine, retire un peu.']
+  ] : [
+    ['Le principe', 'Manger à peu près ce que tu dépenses, avec assez de protéines (1,4 à 1,8 g par kilo) pour garder ta masse musculaire.'],
+    ['Ce qui marche', 'Une assiette régulière : un tiers de protéines, un tiers de féculents, le reste en légumes, avec un filet d\'huile. Des repas simples et faciles à tenir toute l\'année.'],
+    ['Pour rester stable', 'Pèse-toi 2 à 3 matins par semaine et regarde la moyenne. Si elle dérive pendant 2 à 3 semaines, ajuste de 100 à 200 kcal.']
+  ];
+  var S2 = [
+    ['L\'assiette type', 'La moitié de légumes, un quart de protéines (viande maigre, poisson, œufs, tofu, légumineuses), un quart de féculents, un peu de matière grasse (huile d\'olive, avocat, noix) et un fruit en dessert ou en collation.'],
+    ['À privilégier', 'Aliments bruts ou peu transformés : œufs, poissons (dont 1 à 2 fois par semaine gras), volailles, légumineuses, flocons d\'avoine, riz, pommes de terre, fruits et légumes variés, produits laitiers nature, noix et huile d\'olive.'],
+    ['À limiter', 'Boissons sucrées et jus en grande quantité, charcuteries grasses, plats préparés et fritures fréquents, sucreries au quotidien et alcool. Rien n\'est interdit : c\'est la répétition qui compte.'],
+    ['Au restaurant', 'Choisis un plat avec une vraie protéine et des légumes, partage le dessert, demande les sauces à part. Un repas plus libre de temps en temps ne ruine pas une semaine.'],
+    ['Préparer à l\'avance', 'Cuisine 2 féculents et 2 protéines le dimanche, coupe des légumes, garde des œufs durs, du skyr et des fruits à portée de main. Les jours chargés, un repas prêt évite l\'écart.'],
+    ['Erreurs fréquentes', 'Sauter des repas puis compenser le soir, trop peu de protéines, se priver complètement puis craquer, négliger l\'eau et le sommeil, changer de plan tous les 10 jours.'],
+    ['Les régimes à la mode', 'Cétogène, jeûne intermittent, « détox »… Aucun n\'est magique : ce qui compte, c\'est le bilan en calories, les protéines et ta capacité à tenir dans la durée. Le jeûne intermittent peut aider certaines personnes à organiser leurs repas, mais il n\'est pas obligatoire.'],
+    ['Compléments', 'Rien d\'indispensable. La créatine monohydrate et la protéine en poudre sont les plus étudiées, mais seulement si cela t\'aide à tenir tes repères. Parles-en à un professionnel avant de les utiliser.'],
+    ['Quand demander de l\'aide', 'Si tu as une maladie (diabète, reins, troubles digestifs), des allergies, si tu es enceinte ou si tu penses à te priver de manière excessive, vois un médecin ou un diététicien. Pour progresser vite et sans erreur, un diététicien sportif reste le meilleur conseiller.']
+  ];
+  var card = function (a) { return '<div class="card tipcard"><div class="lab">' + a[0] + '</div><p class="why">' + a[1] + '</p></div>'; };
+  return '<section class="sec"><div><h2>' + (g === 'perte' ? 'Perdre du poids' : g === 'muscle' ? 'Prendre du muscle' : 'Rester en forme') + '</h2><p class="sub">Tes besoins estimés : environ ' + kc.toLocaleString('fr-FR') + ' kcal un jour de repos, ' + C.nutrition(p, 'rest').P + ' g de protéines.</p></div>' + P.map(card).join('') + '</section>' +
+    '<section class="sec"><div><h2>Au quotidien</h2></div>' + S2.map(card).join('') + '<p class="legend">Conseils généraux, pas un avis médical ni un régime personnalisé.</p></section>';
+}
+function viewRepasJour() {
   var p = prof();
   if (!p) return '<section class="sec"><div><h2>Alimentation</h2><p class="sub">Pour calculer tes calories et tes repas, j\'ai besoin de ton âge, de ton gabarit et de ton objectif.</p></div><button class="btn primary" data-act="editprofile">Compléter mon profil</button></section>';
   var dt = S.nd || dayTypeAuto(), n = C.nutrition(p, dt, S.mv || {});
@@ -2294,6 +2384,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'evm') { saveEvent('blessure', b.dataset.m || null); }
   else if (a === 'evskip') { var ew = pendingWeek(), eva = readEvents(); eva.push({ t: Date.now(), wk: ew ? ew.w.t : null, r: 'ignore' }); writeEvents(eva); }
   else if (a === 'evoff') { var evb = readEvents(); evb.push({ t: Date.now(), r: 'ignore', off: true }); writeEvents(evb); S.evwarn = null; S.done = {}; S.xtra = []; S.xk = null; }
+  else if (a === 'rt') { S.rt = b.dataset.v; window.scrollTo(0, 0); }
   else if (a === 'nd') { S.nd = b.dataset.v; }
   else if (a === 'mv') { S.mv = S.mv || {}; S.mv[k] = (S.mv[k] || 0) + 1; }
   else if (a === 'plansel') { var pl = C.weekPlan(prof(), { avoid: injured() }); S.sel = pl[wi].slice(); S.done = {}; S.xtra = []; S.xk = null; S.evwarn = null; window.scrollTo(0, 0); }
