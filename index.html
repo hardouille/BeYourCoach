@@ -1804,8 +1804,72 @@ var RAW = [
  "Poulie à hauteur du visage, corde tenue prise neutre.|Tire vers le front en ouvrant les coudes.|Serre les omoplates.|Reviens lentement.",
  "Se pencher en arrière|Hausser les épaules","Coudes plus hauts que les mains.","Complète le face pull avec une variante plus guidée."]
 ];
+/* Repères d'exécution par schéma de mouvement : [tempo, respiration, sécurité (optionnel)] */
+var CUES = {
+press: ['2 s à la descente, courte pause sur la poitrine, poussée vive mais contrôlée.', 'Inspire en descendant, expire en poussant.', 'Charge lourde : rack avec butées réglées sous la poitrine ou pareur. Ne bloque jamais la barre sans sécurité.'],
+press_decline: ['2 s à la descente, poussée régulière sans verrouiller brutalement les coudes.', 'Inspire en revenant, expire en poussant.', 'Règle le siège avant de charger et reste en contact avec le dossier.'],
+press_incline: ['2 s à la descente, poussée régulière.', 'Inspire en descendant, expire en poussant.', 'Banc entre 30° et 45° : plus haut, les épaules prennent le relais des pectoraux. Charge lourde : pareur ou butées.'],
+press_machine: ['2 s au retour, poussée régulière, sans claquer les plaques.', 'Inspire au retour, expire à la poussée.', 'Règle le siège pour que les poignées soient au milieu des pectoraux.'],
+dips: ['2 à 3 s à la descente, poussée régulière.', 'Inspire en descendant, expire en remontant.', 'Descends seulement jusqu\'à l\'amplitude confortable pour tes épaules. Douleur à l\'avant de l\'épaule : arrête et choisis un autre exercice.'],
+fly: ['3 s à l\'ouverture, 1 s à la fermeture.', 'Inspire en ouvrant, expire en refermant.', 'Coudes légèrement fléchis et fixes. Charge modérée : l\'épaule est fragile en grande amplitude.'],
+fly_machine: ['2 s au retour, 1 s à la contraction.', 'Inspire en ouvrant, expire en refermant.', 'Règle le siège pour que les poignées soient à hauteur de poitrine.'],
+cable_down: ['2 s au retour, contraction d\'1 s.', 'Inspire en revenant, expire en travaillant.', 'Garde le tronc stable, sans te servir de ton élan.'],
+cable_up: ['2 s au retour, contraction d\'1 s en haut.', 'Inspire en revenant, expire en montant.', 'Garde les coudes légèrement fléchis et le dos droit.'],
+pullup: ['1 s à la montée, 3 s à la descente.', 'Inspire en bas, expire en montant.', 'Descends bras tendus, mais sans te laisser tomber dans les épaules. Si tu ne fais pas 5 répétitions propres, utilise l\'assistance ou un élastique.'],
+pulldown: ['1 s à la traction, 2 à 3 s au retour.', 'Inspire en haut, expire en tirant.', 'Cale bien les cuisses sous les coussins. Tire vers le haut de la poitrine, jamais derrière la nuque.'],
+row_seated: ['1 s à la traction, contraction d\'1 s, 2 s au retour.', 'Expire en tirant, inspire au retour.', 'Reste droit, sans te balancer. Ne t\'arrondis pas en laissant revenir les poignées.'],
+row: ['1 s à la traction, 2 s à la descente.', 'Expire en tirant, inspire en descendant.', 'Dos plat pendant toute la série. Si tu t\'arrondis ou si tu te redresses pour monter la charge, allège.'],
+deadlift: ['Montée régulière, 2 à 3 s à la descente, repose la barre au sol entre chaque répétition.', 'Inspire et gaine le ventre avant de tirer, expire en haut ou en reposant la barre.', 'Dos neutre du début à la fin. Si ton dos s\'arrondit, la charge est trop lourde. Échauffe-toi par séries progressives.'],
+straight_arm: ['1 s vers le bas, 2 s au retour.', 'Expire en tirant, inspire au retour.', 'Bras presque tendus, sans plier les coudes. Garde le dos stable.'],
+shrug: ['1 s en haut, 2 s à la descente.', 'Expire en haussant, inspire en descendant.', 'Monte droit sans rouler les épaules. Évite de charger trop lourd, ta prise se fatigue avant tes trapèzes.'],
+back_ext: ['Montée régulière, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Arrête-toi quand le corps est aligné : ne te cambre pas en haut. Pas de rebond en bas.'],
+ohp: ['1 s à la poussée, 2 s à la descente.', 'Expire en poussant, inspire en descendant.', 'Gaine le ventre et les fessiers pour ne pas cambrer le bas du dos. Si tu cambres, allège ou assieds-toi avec un dossier.'],
+lateral: ['1 s à la montée, 2 à 3 s à la descente.', 'Expire en montant, inspire en descendant.', 'Monte jusqu\'à l\'horizontale seulement, avec une charge légère. N\'utilise pas l\'élan.'],
+front_raise: ['1 s à la montée, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Monte jusqu\'à l\'horizontale seulement, sans te pencher en arrière.'],
+bent_fly: ['1 s à l\'ouverture, 2 s au retour.', 'Expire en ouvrant, inspire au retour.', 'Charge légère : les deltoïdes arrière sont petits. Ne tire pas avec le dos.'],
+rear_fly: ['1 s à l\'ouverture, 2 s au retour.', 'Expire en ouvrant, inspire au retour.', 'Ouvre les bras sans hausser les épaules.'],
+face_pull: ['1 s à la traction, contraction d\'1 s, 2 s au retour.', 'Expire en tirant, inspire au retour.', 'Charge légère, mouvement propre. Coudes plus hauts que les mains.'],
+upright_row: ['1 s à la montée, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Monte les coudes jusqu\'à la hauteur des épaules maximum. Si l\'épaule pince, choisis une autre variante.'],
+curl: ['1 s à la montée, 2 à 3 s à la descente.', 'Expire en montant, inspire en descendant.', 'Coudes contre le buste, sans balancer le corps. Si tu balances, la charge est trop lourde.'],
+curl_preacher: ['1 s à la montée, 3 s à la descente.', 'Expire en montant, inspire en descendant.', 'Ne tends pas complètement les bras en bas avec une charge lourde : les tendons du biceps sont sollicités.'],
+curl_conc: ['1 s à la montée, 2 à 3 s à la descente.', 'Expire en montant, inspire en descendant.', 'Coude calé contre la cuisse, sans balancer le buste.'],
+curl_incline: ['1 s à la montée, 3 s à la descente.', 'Expire en montant, inspire en descendant.', 'Étirement important du biceps : commence léger.'],
+skull: ['2 s à la descente, 1 s à la montée.', 'Inspire en descendant, expire en tendant les bras.', 'Descends la barre derrière la tête ou vers le front, avec une charge que tu contrôles. Partenaire utile si la charge est lourde.'],
+pushdown: ['1 s vers le bas, 2 s au retour.', 'Expire en poussant, inspire au retour.', 'Coudes collés au buste et fixes, seul l\'avant-bras bouge.'],
+overhead_ext: ['2 s à la descente, 1 s à la montée.', 'Inspire en descendant, expire en tendant.', 'Garde les coudes serrés. Si tu cambres le dos, assieds-toi avec un dossier.'],
+kickback_tri: ['1 s à l\'extension, 2 s au retour.', 'Expire en tendant, inspire au retour.', 'Charge légère, buste stable, coude haut et fixe.'],
+squat: ['2 à 3 s à la descente, remontée régulière.', 'Inspire en haut et gaine le ventre, expire en remontant.', 'Rack avec butées réglées en dessous de ta profondeur. Dos neutre, genoux dans l\'axe des pieds. Charge lourde : échauffe-toi par séries progressives.'],
+hack: ['2 à 3 s à la descente, poussée régulière.', 'Inspire en descendant, expire en poussant.', 'Garde le dos et les fessiers contre le dossier. Ne verrouille pas les genoux en haut.'],
+leg_press: ['2 à 3 s à la descente, poussée régulière.', 'Inspire en descendant, expire en poussant.', 'Ne décolle pas le bas du dos du dossier. Ne verrouille pas les genoux en haut. Règle toujours les butées de sécurité.'],
+split_squat: ['2 à 3 s à la descente, remontée régulière.', 'Inspire en descendant, expire en remontant.', 'Commence sans charge pour trouver l\'équilibre. Genou avant dans l\'axe du pied.'],
+leg_ext: ['1 s à l\'extension, contraction d\'1 s, 2 à 3 s au retour.', 'Expire en tendant, inspire au retour.', 'Charge modérée. Ne verrouille pas violemment le genou en haut. Règle le dossier pour que le genou soit à l\'axe de la machine.'],
+hinge: ['2 à 3 s à la descente, remontée régulière.', 'Inspire en haut, expire en remontant.', 'Dos plat, jambes presque tendues, mouvement de charnière aux hanches. Descends tant que le dos reste plat.'],
+leg_curl_lying: ['1 s à la flexion, 2 à 3 s au retour.', 'Expire en fléchissant, inspire au retour.', 'Garde les hanches collées au banc. Pas de coup de reins.'],
+leg_curl_seated: ['1 s à la flexion, 2 à 3 s au retour.', 'Expire en fléchissant, inspire au retour.', 'Cale bien le coussin sur les cuisses. Pas d\'élan.'],
+hip_thrust: ['1 s de poussée, 1 s de contraction en haut, 2 s à la descente.', 'Expire en poussant, inspire en descendant.', 'Menton rentré, côtes basses. Ne cambre pas en haut. Protège les hanches avec un coussin pour la barre.'],
+glute_kick: ['1 s à l\'extension, contraction d\'1 s, 2 s au retour.', 'Expire en poussant, inspire au retour.', 'Garde le dos stable, sans te cambrer.'],
+abduction: ['1 s à l\'ouverture, 2 s au retour.', 'Expire en ouvrant, inspire au retour.', 'Mouvement contrôlé, sans balancer le buste.'],
+adduction: ['1 s à la fermeture, 2 s au retour.', 'Expire en fermant, inspire au retour.', 'Amplitude confortable, surtout si les adducteurs sont raides.'],
+calf_seated: ['1 s de montée, pause d\'1 s en haut, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Descends complètement pour étirer le mollet.'],
+pushup: ['2 s à la descente, 1 s à la montée.', 'Inspire en descendant, expire en poussant.', 'Corps en planche, sans cambrer. Trop dur : pose les genoux ou les mains sur un support surélevé.'],
+bench_dip: ['2 s à la descente, 1 s à la montée.', 'Inspire en descendant, expire en poussant.', 'Reste proche du banc et ne descends pas trop bas : l\'avant de l\'épaule est sollicité.'],
+goblet: ['2 s à la descente, remontée régulière.', 'Inspire en descendant, expire en remontant.', 'Garde l\'haltère contre la poitrine et le buste droit.'],
+lunge: ['2 s à la descente, remontée régulière.', 'Inspire en descendant, expire en remontant.', 'Genou avant dans l\'axe du pied. Commence léger pour trouver l\'équilibre.'],
+step_up: ['1 s à la montée, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Choisis une hauteur de marche où le genou ne dépasse pas la hanche. Pousse avec la jambe de devant, pas avec celle de derrière.'],
+good_morning: ['3 s à la descente, remontée régulière.', 'Inspire en descendant, expire en remontant.', 'Dos plat, charge légère. Cet exercice sollicite fortement le bas du dos : commence très léger et ne descends que tant que le dos reste plat.'],
+leg_curl_stand: ['1 s à la flexion, 2 à 3 s au retour.', 'Expire en fléchissant, inspire au retour.', 'Garde le bassin stable, sans cambrer.'],
+calf_stand: ['1 s de montée, pause d\'1 s en haut, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Descends complètement pour étirer le mollet, sans rebondir.'],
+crunch: ['1 s à la contraction, 2 s au retour.', 'Expire en contractant, inspire au retour.', 'Ne tire pas sur la nuque. Le mouvement vient des abdominaux, pas de l\'élan.'],
+leg_raise: ['1 s à la montée, 2 à 3 s à la descente.', 'Expire en montant, inspire en descendant.', 'Évite de te balancer. Si le bas du dos se cambre, plie les genoux.'],
+plank: ['Maintiens la position sans bouger. Vise 20 à 60 s propres.', 'Respire normalement, sans retenir ton souffle.', 'Stoppe la série si le bas du dos se creuse. Roue abdominale : commence avec une petite amplitude.'],
+cable_crunch: ['1 s à la contraction, 2 s au retour.', 'Expire en contractant, inspire au retour.', 'Les hanches restent fixes, seul le dos s\'enroule.'],
+superman: ['Montée régulière, pause d\'1 à 2 s, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Ne cambre pas excessivement. Regarde le sol, la nuque reste dans l\'axe.'],
+wrist_curl: ['1 s à la montée, 2 s à la descente.', 'Expire en montant, inspire en descendant.', 'Avant-bras posé sur la cuisse ou un banc. Charge légère, séries longues.'],
+farmer: ['Marche à pas réguliers, buste droit.', 'Respire normalement, sans retenir ton souffle.', 'Poignets neutres, épaules basses. Pose les charges au sol avant que la prise lâche.'],
+hang: ['Reste suspendu 20 à 60 s, épaules actives.', 'Respire normalement.', 'Descends de la barre avant que la prise lâche. Pas de saut brutal.']
+};
 var LIB = RAW.map(function (a) {
-  return { n: a[0], m: a[1], k: a[2], bw: !!a[3], p: a[4], im: a[5], eq: a[6], sec: a[7], st: a[8].split('|'), er: a[9].split('|'), tip: a[10], why: a[11] || '', x: !!a[11] };
+  return { n: a[0], m: a[1], k: a[2], bw: !!a[3], p: a[4], im: a[5], eq: a[6], sec: a[7], st: a[8].split('|'), er: a[9].split('|'), tip: a[10], why: a[11] || '', x: !!a[11], cue: CUES[a[4]] || null };
 });
 root.LIB = LIB;
 })(typeof window !== 'undefined' ? window : this);
@@ -3037,7 +3101,7 @@ function ficheHTML(name) {
     '<div class="lab">Muscles</div><p class="why"><b>' + e.m + '</b>' + (e.sec ? ' · secondaires : ' + esc(e.sec) : '') + '</p>' +
     '<div class="lab">Matériel</div><p class="why">' + esc(e.eq) + '</p>' +
     '<div class="lab">Exécution</div><ol class="how">' + e.st.map(li).join('') + '</ol>' +
-    '<div class="lab">Erreurs fréquentes</div><ul class="how">' + e.er.map(li).join('') + '</ul>' +
+    (e.cue ? '<div class="lab">Tempo et respiration</div><p class="why">' + esc(e.cue[0]) + ' ' + esc(e.cue[1]) + '</p>' + (e.cue[2] ? '<div class="lab">Sécurité</div><p class="why">' + esc(e.cue[2]) + '</p>' : '') : '') + '<div class="lab">Erreurs fréquentes</div><ul class="how">' + e.er.map(li).join('') + '</ul>' +
     '<div class="msg tip">' + esc(e.tip) + '</div></div>';
 }
 function ficheToggle(name) {
