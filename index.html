@@ -195,6 +195,7 @@ select.search { appearance: auto; }
 .figbox svg.fig { width: 100%; max-width: 440px; height: auto; display: block; margin: 0 auto; }
 .vid { position: relative; width: 100%; max-width: 440px; margin: 0 auto 8px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
 .vid iframe, .vid .vth { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.vid.v { aspect-ratio: 9 / 16; max-width: 260px; }
 .vid .vth { padding: 0; cursor: pointer; background: #000 center / cover no-repeat; color: #fff; display: flex; align-items: center; justify-content: center; font: inherit; }
 .vid .vth .vb { width: 58px; height: 58px; border-radius: 50%; background: rgba(0,0,0,.62); border: 2px solid #fff; display: flex; align-items: center; justify-content: center; }
 .vid .vth .vb::after { content: ""; margin-left: 4px; border-left: 16px solid #fff; border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
@@ -2479,10 +2480,7 @@ var VIDEOS = {
   "PbxQJt1l1YU",
   "Olymp'Fit"
  ],
- "Écarté (machine)": [
-  "-kIarTAwLc4",
-  "TeamSuperPhysique"
- ],
+ "Écarté (machine)": ["Lu36hU2PVSY", "Muscle & Motion", "v"],
  "Écartés poulie haute": [
   "WlIR9zNLV1s",
   "TeamSuperPhysique"
@@ -2531,18 +2529,12 @@ var VIDEOS = {
   "HVjdVv6FYD4",
   "Jon Healthyman"
  ],
- "Rowing poulie assis (prise en V)": [
-  "QhlKp85tXic",
-  "Antoine MH"
- ],
+ "Rowing poulie assis (prise en V)": ["D0PHM1GgQas", "Marzrodie", "v"],
  "Rowing poulie assis (prise large)": [
   "dRADeAhEamY",
   "Anthony Oknaian"
  ],
- "Soulevé de terre (barre)": [
-  "qmw2epqYsTM",
-  "GooFiit"
- ],
+ "Soulevé de terre (barre)": ["sRlHkYb3V2w", "SciePro", "v"],
  "Tirage bras tendus (poulie)": [
   "0khkYXJgVs0",
   "TeamSuperPhysique"
@@ -3031,7 +3023,7 @@ var VIDEOS = {
 function videoHTML(name) {
   var v = VIDEOS[name]; if (!v) return '';
   var id = v[0], on = S.vp === id;
-  return '<div class="vid">' + (on ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?rel=0&amp;playsinline=1&amp;autoplay=1" title="Vidéo : ' + esc(name) + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>' :
+  return '<div class="vid' + (v[2] === 'v' ? ' v' : '') + '">' + (on ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?rel=0&amp;playsinline=1&amp;autoplay=1" title="Vidéo : ' + esc(name) + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>' :
     '<button class="vth" data-act="vplay" data-k="' + id + '" style="background-image:url(https://i.ytimg.com/vi/' + id + '/hqdefault.jpg)" aria-label="Lire la vidéo de démonstration"><span class="vb"></span></button>') + '</div>' +
     '<p class="legend">Vidéo : ' + esc(v[1]) + ' sur YouTube (connexion requise). <a href="https://www.youtube.com/watch?v=' + id + '" target="_blank" rel="noopener">Ouvrir sur YouTube</a></p>';
 }
