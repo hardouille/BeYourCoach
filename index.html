@@ -636,7 +636,7 @@ function fmtRest(x) { return x < 90 ? x + ' s' : Math.floor(x / 60) + ' min' + (
 function method(it, goal, ctx) {
   var heavy = it.kind === 'C' && rank(it.name, it.kind) >= 140, comp = it.kind === 'C', g = goal || 'maintien';
   var rest = heavy ? (g === 'perte' ? [90, 120] : [150, 240]) : comp ? (g === 'perte' ? [60, 90] : g === 'muscle' ? [90, 150] : [90, 120]) : (g === 'perte' ? [45, 60] : [60, 90]);
-  var rir = ctx.deload ? '4 : aucune série difficile' : heavy ? '2 (stoppe 2 reps avant l\'échec)' : comp ? '1 à 2' : '0 à 1 (la dernière série peut aller à l\'échec)';
+  var rir = ctx.deload ? '4 : aucune série difficile' : ctx.easy ? '2 à 3 (reste confortable)' : heavy ? '2 (stoppe 2 reps avant l\'échec)' : comp ? '1 à 2' : '0 à 1 (la dernière série peut aller à l\'échec)';
   var tech = ['Descente contrôlée sur 2 à 3 s, puis remonte avec intention.'];
   if (!it.bw && heavy && !ctx.deload && g !== 'perte') tech.push('Série lourde en premier, puis les suivantes avec ~8 % de moins pour garder des reps de qualité.');
   if (!comp && STRETCH.test(it.name)) tech.push('Descends bien dans l\'étirement du muscle : le travail en allongement est très efficace.');
@@ -654,7 +654,7 @@ function rank(name, kind) {
   if (/\(barre\)|barre EZ/i.test(name)) r += 20; else if (/haltère/i.test(name)) r += 10; else if (/\(machine\)|poulie/i.test(name)) r += 2;
   return r;
 }
-function quota(n, i) { return n <= 1 ? 6 : n === 2 ? [4, 2][i] : [3, 2, 1][i] || 0; }
+function quota(n, i, mx) { mx = mx || MAX_EX; if (mx <= 4) return n <= 1 ? 4 : n === 2 ? [3, 1][i] : [2, 1, 1][i] || 0; return n <= 1 ? 6 : n === 2 ? [4, 2][i] : [3, 2, 1][i] || 0; }
 function slotKind(i) { return ['C', 'I', 'C', 'I', 'I', 'I'][i] || 'I'; }
 function recommend(model, muscles, now, opts) {
   opts = opts || {};
@@ -676,8 +676,9 @@ function recommend(model, muscles, now, opts) {
   /* Le 1er muscle est le muscle principal de la séance, les suivants le complètent : 6 exercices au maximum. */
   var picked = per.map(function () { return []; });
   function take(i) { var P = per[i], kd = slotKind(P.n), alt = kd === 'C' ? 'I' : 'C', o = P[kd].shift() || P[alt].shift(); if (o) { P.n++; picked[i].push(o); } return !!o; }
-  per.forEach(function (P, i) { var q = quota(per.length, i); for (var k = 0; k < q; k++) if (!take(i)) break; });
-  var left = MAX_EX - picked.reduce(function (t, l) { return t + l.length; }, 0), gd = 0;
+  var MX = opts.maxEx || MAX_EX;
+  per.forEach(function (P, i) { var q = quota(per.length, i, MX); for (var k = 0; k < q; k++) if (!take(i)) break; });
+  var left = MX - picked.reduce(function (t, l) { return t + l.length; }, 0), gd = 0;
   while (left > 0 && gd++ < 20) { var got = false; for (var j = 0; j < per.length && left > 0; j++) if (take(j)) { left--; got = true; } if (!got) break; }
   picked = picked.map(function (l) { return l.sort(function (a, b) { return rank(b.X.name, b.X.kind) - rank(a.X.name, a.X.kind); }); });
   picked = picked.reduce(function (t, l) { return t.concat(l); }, []);
@@ -689,12 +690,14 @@ function recommend(model, muscles, now, opts) {
       it.sets = Math.max(2, Math.ceil(it.sets * 0.6));
       if (!it.bw && it.inc) it.w = r1(Math.round(it.w * 0.9 / it.inc) * it.inc);
       it.why = 'Semaine allégée : moins de séries, charge −10 %. ' + it.why;
+    } else if (opts.easy) {
+      it.sets = Math.max(2, it.sets - 1); it.vnote = 'Adaptation à ton imprévu : une série de moins, le temps de retrouver ton rythme.';
     } else if (stt.avg4 && stt.avg4 < vol[0] && it.sets < 5 && isMain) {
       it.sets += 1; it.vnote = 'Ton volume sur ' + it.muscle + ' (' + Math.round(stt.avg4) + ' séries / semaine) est sous les ' + vol[0] + ' conseillées : une série de plus.';
     } else if (stt.avg4 > vol[1] && it.sets > 2) {
       it.sets -= 1; it.vnote = 'Tu fais déjà ' + Math.round(stt.avg4) + ' séries / semaine sur ' + it.muscle + ' (au-delà de ' + vol[1] + ') : une série de moins pour bien récupérer.';
     }
-    method(it, opts.goal, { deload: opts.deload, finisher: isMain && lastIso[it.muscle] === i && model.sessions.length >= 30 });
+    method(it, opts.goal, { easy: opts.easy, deload: opts.deload, finisher: isMain && lastIso[it.muscle] === i && model.sessions.length >= 30 });
   });
   var first = items.filter(function (x) { return x.kind === 'C' && !x.bw && x.w >= 20; })[0];
   if (first) {
@@ -1633,7 +1636,7 @@ function autoXtra() {
   var cnt = {}; C.recommend(model, S.sel, now(), ropts()).items.forEach(function (it) { cnt[it.muscle] = (cnt[it.muscle] || 0) + 1; });
   S.sel.forEach(function (m, i) {
     if (hasHist(m)) return;
-    newFor(m).slice(0, Math.max(0, C.quota(S.sel.length, i) - (cnt[m] || 0))).forEach(function (e) { S.xtra.push(e.n); });
+    newFor(m).slice(0, Math.max(0, C.quota(S.sel.length, i, ropts().maxEx) - (cnt[m] || 0))).forEach(function (e) { S.xtra.push(e.n); });
   });
 }
 function newFor(m) {
@@ -1644,7 +1647,7 @@ function companionsSection(byM) {
   var cand = {};
   S.sel.forEach(function (m) {
     (C.PAIRS[m] || []).forEach(function (p, i) {
-      if (S.sel.indexOf(p[0]) >= 0) return;
+      if (S.sel.indexOf(p[0]) >= 0 || p[0] === injured()) return;
       var c = cand[p[0]] || (cand[p[0]] = { m: p[0], score: 0, why: p[1] });
       c.score += 10 - i;
     });
@@ -1660,8 +1663,64 @@ function companionsSection(byM) {
     return '<button class="comp" data-act="addm" data-m="' + esc(c.m) + '"><span class="cn"><i class="dot ' + c.state + '"></i>' + esc(c.m) + '</span><span class="cw">' + esc(c.why) + ' · ' + esc(c.label) + '</span></button>';
   }).join('') + '</div></section>';
 }
+
+/* ---------- imprévus : séances manquées, fatigue, blessure... l'appli s'adapte ---------- */
+var EV_REASONS = [['temps', 'Pas le temps'], ['fatigue', 'Fatigue ou mauvais sommeil'], ['blessure', 'Douleur ou blessure'], ['maladie', 'Maladie'], ['voyage', 'Voyage ou vacances'], ['motivation', 'Manque de motivation'], ['autre', 'Autre chose']];
+var EV_TEXT = {
+  temps: 'Séances courtes : 4 exercices au maximum. Astuce : enchaîne deux exercices de muscles différents sans repos entre eux (superset) pour gagner du temps.',
+  fatigue: 'Une série de moins par exercice et des séries plus confortables pendant quelques jours. Dors 7 à 9 h si tu peux.',
+  blessure: 'On ménage la zone concernée et on reste confortable. Si la douleur est vive ou persiste, vois un médecin ou un kinésithérapeute avant de la recharger.',
+  maladie: 'Reprise progressive : semaine allégée, avec moins de séries et des charges −10 %. Reprends quand tu te sens bien ; en cas de fièvre ou de symptômes qui durent, repose-toi et demande un avis médical.',
+  voyage: 'Reprise en douceur : semaine allégée pour retrouver tes charges sans te blesser. En voyage, pompes, tractions ou squats au poids du corps suffisent à garder le rythme.',
+  motivation: 'On vise petit : 4 exercices au maximum. Une séance courte vaut mieux qu\'une séance sautée. Fixe-toi un créneau précis dans ta semaine.',
+  autre: 'C\'est noté, ça arrive. Reprends doucement avec une série de moins par exercice.'
+};
+function readEvents() { try { var a = JSON.parse(lsGet('cds.events') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } }
+function writeEvents(a) { lsSet('cds.events', JSON.stringify(a.slice(-40))); }
+function activeEvent() {
+  var a = readEvents(), i, t = Date.now();
+  for (i = a.length - 1; i >= 0; i--) {
+    var ev = a[i]; if (ev.off) return null;
+    if (ev.r === 'ignore') continue;
+    return t - ev.t < (ev.r === 'blessure' ? 14 : 7) * 864e5 ? ev : null;
+  }
+  return null;
+}
+function injured() { var ev = activeEvent(); return ev && ev.r === 'blessure' && ev.m ? ev.m : null; }
+function pendingWeek() {
+  var p = prof(); if (!p || !hasData() || S.evq) return null;
+  var f = freqInfo(), w = C.weekly(model, now(), 2)[0];
+  if (!w || !f || w.sessions >= f[2] || model.first >= w.t) return null;
+  if (readEvents().some(function (ev) { return ev.wk === w.t; })) return null;
+  return { w: w, f: f };
+}
+function saveEvent(r, m) {
+  var pw = pendingWeek(), a = readEvents();
+  a.push({ t: Date.now(), wk: pw ? pw.w.t : null, r: r, m: m || null }); writeEvents(a);
+  S.evq = null; S.evwarn = null; S.done = {}; S.xtra = []; S.xk = null;
+  if (m) { var i = S.sel.indexOf(m); if (i >= 0) S.sel.splice(i, 1); }
+}
+function evCard() {
+  var ev = activeEvent(), pw = pendingWeek(), q = S.evq, h = '';
+  if (S.evwarn) h += '<div class="banner crit"><span>' + esc(S.evwarn) + '</span></div>';
+  var rs = EV_REASONS.map(function (r) { return '<button class="chip go" data-act="evr" data-r="' + r[0] + '">' + r[1] + '</button>'; }).join('');
+  if (q && q.step === 'muscle') return h + '<section class="sec"><div class="card"><div class="lab">Où as-tu mal ?</div><p class="why">Je ne te proposerai plus ce muscle pendant 2 semaines.</p><div class="chips">' + C.MUSCLES.map(function (m) { return '<button class="chip" data-act="evm" data-m="' + esc(m) + '">' + esc(m) + '</button>'; }).join('') + '<button class="chip" data-act="evm" data-m="">Je ne sais pas</button></div></div></section>';
+  if (q && q.step === 'reason') return h + '<section class="sec"><div class="card"><div class="lab">Un imprévu ?</div><p class="why">Dis-moi ce qui se passe, j\'adapte tes prochaines séances.</p><div class="chips">' + rs + '</div><div><button class="btn" data-act="evclose">Fermer</button></div></div></section>';
+  if (pw) {
+    var n = pw.w.sessions;
+    return h + '<section class="sec"><div class="card"><div class="lab">Semaine dernière</div><div class="ename">' + n + ' séance' + (n > 1 ? 's' : '') + ' sur ' + esc(pw.f[1].replace(' par semaine', '')) + ' prévues</div><p class="why">Qu\'est-ce qui s\'est passé ? Ça arrive à tout le monde, et je peux adapter tes séances.</p><div class="chips">' + rs + '</div><div><button class="btn" data-act="evskip">Rien de spécial, on continue</button></div></div></section>';
+  }
+  if (ev) {
+    var rn = EV_REASONS.filter(function (r) { return r[0] === ev.r; })[0][1];
+    return h + '<section class="sec"><div class="card"><div class="lab">Adaptation en cours · ' + esc(rn.toLowerCase()) + (ev.m ? ' · ' + esc(ev.m) : '') + '</div><p class="why">' + esc(EV_TEXT[ev.r]) + '</p><div><button class="btn" data-act="evoff">Revenir au programme normal</button></div></div></section>';
+  }
+  return h + (hasData() ? '<div><button class="btn" data-act="evopen">Un imprévu cette semaine ?</button></div>' : '');
+}
 function deloadOn() { try { var t = parseInt(localStorage.getItem('cds.deload') || '0', 10); return t && Date.now() - t < 7 * 864e5; } catch (e) { return false; } }
-function ropts() { return { goal: PROFILE && !PROFILE.skip ? PROFILE.goal : null, deload: deloadOn() }; }
+function ropts() {
+  var ev = activeEvent(), r = ev && ev.r;
+  return { goal: PROFILE && !PROFILE.skip ? PROFILE.goal : null, deload: deloadOn() || r === 'maladie' || r === 'voyage', maxEx: r === 'temps' || r === 'motivation' ? 4 : 0, easy: r === 'fatigue' || r === 'blessure' || r === 'autre' };
+}
 function deloadCard() {
   if (deloadOn()) return '<div class="msg tip"><div class="lab">Semaine allégée en cours</div><p class="why">Moins de séries, charges −10 %, rien de difficile. Tu reviens à ton rythme normal ensuite.</p><button class="btn" data-act="deload" data-v="0">Revenir au programme normal</button></div>';
   var d = C.needsDeload(model, now()); if (!d.suggest || !hasData()) return '';
@@ -1674,7 +1733,7 @@ function methLine(it) {
 function focusCard() {
   if (!S.sel.length) return '';
   var q = S.sel.length;
-  var txt = q === 1 ? 'Toute la séance travaille <b>' + esc(S.sel[0]) + '</b>.' : '<b>' + esc(S.sel[0]) + '</b> est le muscle principal (' + C.quota(q, 0) + ' exercices, les plus lourds en premier). ' + S.sel.slice(1).map(function (m, i) { return '<b>' + esc(m) + '</b> (' + C.quota(q, i + 1) + ')'; }).join(' et ') + ' complète' + (q > 2 ? 'nt' : '') + ' la fin de séance.';
+  var txt = q === 1 ? 'Toute la séance travaille <b>' + esc(S.sel[0]) + '</b>.' : '<b>' + esc(S.sel[0]) + '</b> est le muscle principal (' + C.quota(q, 0, ropts().maxEx) + ' exercices, les plus lourds en premier). ' + S.sel.slice(1).map(function (m, i) { return '<b>' + esc(m) + '</b> (' + C.quota(q, i + 1, ropts().maxEx) + ')'; }).join(' et ') + ' complète' + (q > 2 ? 'nt' : '') + ' la fin de séance.';
   return '<div class="msg tip"><div class="lab">Muscle à travailler en priorité</div><p class="why">' + txt + '</p>' +
     (q > 1 ? '<div class="chips">' + S.sel.map(function (m, i) { return '<button class="chip' + (i === 0 ? ' go' : '') + '" data-act="focus" data-m="' + esc(m) + '" aria-pressed="' + (i === 0) + '">' + (i === 0 ? '★ ' : '') + esc(m) + '</button>'; }).join('') + '</div><p class="legend">Touche un muscle pour en faire le principal.</p>' : '') + '</div>';
 }
@@ -1687,12 +1746,12 @@ function viewSeance() {
   var tiles = C.GROUPS.map(function (g) {
     return '<div class="lab">' + g[0] + '</div><div class="tiles">' + g[1].map(function (m) {
       var s = byM[m], on = S.sel.indexOf(m) >= 0;
-      return '<button class="tile" data-act="pick" data-m="' + m + '" aria-pressed="' + on + '"><span class="n">' + m + '</span><span class="s"><i class="dot ' + s.state + '"></i>' + esc(s.label) + '</span><span class="k">' + s.s7 + ' séries / 7 j</span></button>';
+      return '<button class="tile" data-act="pick" data-m="' + m + '" aria-pressed="' + on + '"><span class="n">' + m + '</span><span class="s"><i class="dot ' + s.state + '"></i>' + esc(s.label) + '</span><span class="k">' + (m === injured() ? 'à ménager' : s.s7 + ' séries / 7 j') + '</span></button>';
     }).join('') + '</div>';
   }).join('');
   var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche jusqu\'à trois muscles : le premier est le muscle principal, les suivants le complètent. Le point indique la récupération : vert, plus de 48 h.</p></div>' +
-    '<div class="chips">' + C.PRESETS.map(function (p, i) { return '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + tiles + '</section>';
-  h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + h;
+    '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + tiles + '</section>';
+  h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + evCard() + h;
   h += companionsSection(byM);
   autoXtra();
   if (!S.sel.length) return h + '<p class="empty">Choisis un muscle pour obtenir ta séance.</p>';
@@ -1990,8 +2049,15 @@ document.addEventListener('click', function (e) {
   var a = b.getAttribute('data-act'), m = b.getAttribute('data-m'), k = b.getAttribute('data-k'), wi = +b.getAttribute('data-i'), wj = +b.getAttribute('data-j');
   if (a !== 'reset' && a !== 'wabort') S.confirm = null;
   if (a === 'tab') return go(b.getAttribute('data-t'));
-  if (a === 'pick') { var i = S.sel.indexOf(m); if (i >= 0) S.sel.splice(i, 1); else { S.sel.push(m); if (S.sel.length > 3) S.sel.splice(1, 1); } S.done = {}; S.xtra = []; S.xk = null; }
+  if (a === 'pick' && m === injured() && S.sel.indexOf(m) < 0) { S.evwarn = 'Tu as signalé une douleur sur ' + m + ' : on le ménage. Choisis un autre muscle, ou touche « Revenir au programme normal » si c\'est réglé.'; }
+  else if (a === 'pick') { S.evwarn = null; var i = S.sel.indexOf(m); if (i >= 0) S.sel.splice(i, 1); else { S.sel.push(m); if (S.sel.length > 3) S.sel.splice(1, 1); } S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'deload') { try { if (b.dataset.v === '1') localStorage.setItem('cds.deload', String(Date.now())); else localStorage.removeItem('cds.deload'); } catch (e) {} S.done = {}; S.xtra = []; S.xk = null; }
+  else if (a === 'evopen') { S.evq = { step: 'reason' }; }
+  else if (a === 'evclose') { S.evq = null; }
+  else if (a === 'evr') { if (b.dataset.r === 'blessure') S.evq = { step: 'muscle' }; else saveEvent(b.dataset.r); }
+  else if (a === 'evm') { saveEvent('blessure', b.dataset.m || null); }
+  else if (a === 'evskip') { var ew = pendingWeek(), eva = readEvents(); eva.push({ t: Date.now(), wk: ew ? ew.w.t : null, r: 'ignore' }); writeEvents(eva); }
+  else if (a === 'evoff') { var evb = readEvents(); evb.push({ t: Date.now(), r: 'ignore', off: true }); writeEvents(evb); S.evwarn = null; S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'focus') { var fi = S.sel.indexOf(m); if (fi > 0) { S.sel.splice(fi, 1); S.sel.unshift(m); } S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'swap') { S.sel = [m]; S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'preset') { S.sel = C.PRESETS[wi][1].slice(); S.done = {}; S.xtra = []; S.xk = null; }
