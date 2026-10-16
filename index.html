@@ -86,7 +86,7 @@ h2 { font: 800 22px/1.1 var(--f-display); letter-spacing: .03em; text-transform:
 
 nav.tabs {
   background: var(--bg); border-bottom: 1px solid var(--line);
-  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
+  display: grid; grid-template-columns: repeat(6, 1fr); gap: 0;
   padding: 4px max(8px, env(safe-area-inset-right, 0px)) 4px max(8px, env(safe-area-inset-left, 0px));
 }
 nav.tabs:empty { display: none; }
@@ -104,7 +104,16 @@ nav.tabs:empty { display: none; }
 .pday.next { border-color: var(--accent); background: var(--accent-soft); }
 .pn { font: 800 16px var(--f-display); color: var(--accent); min-width: 20px; }
 .pm { flex: 1; min-width: 0; font-size: 14px; }
-.tabs button { font-size: 10.5px; }
+.tabs button { font-size: 10px; padding-left: 0; padding-right: 0; }
+.chat { display: flex; flex-direction: column; gap: 8px; }
+.bub { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 14.5px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
+.bub p { margin: 0 0 6px; } .bub p:last-child { margin: 0; } .bub ul { margin: 4px 0; padding-left: 18px; }
+.bub.me { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent); }
+.bub.ai { align-self: flex-start; background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; }
+.bub.wait { color: var(--muted); font-style: italic; }
+.chatin { display: flex; gap: 8px; align-items: flex-end; }
+.chatin textarea { flex: 1; min-width: 0; resize: none; background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 10px; font: inherit; color: var(--ink); }
+.chatin textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
 .meth { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
 .meth b { color: var(--ink); font-weight: 600; }
 .tile .k { font: 10.5px var(--f-mono); color: var(--muted); white-space: nowrap; }
@@ -1552,6 +1561,7 @@ var TABS = [
   ['seance', 'Séance', '<path d="M3 12h18M6.5 8v8M17.5 8v8M10 6v12M14 6v12"/>'],
   ['progres', 'Progrès', '<path d="M3 17l5-5 4 3 8-9M15 6h5v5"/>'],
   ['exos', 'Exos', '<path d="M4 6h16M4 12h16M4 18h10"/>'],
+  ['coach', 'Coach', '<path d="M5 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-7l-4 4v-4H5a2 2 0 01-2-2V7a2 2 0 012-2z"/>'],
   ['repas', 'Repas', '<path d="M7 3v8a2 2 0 002 2v8M11 3v8a2 2 0 01-2 2M17 3c-2 2-2.5 5-2.5 8H17v10"/>'],
   ['data', 'Données', '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>']
 ];
@@ -1871,6 +1881,77 @@ function viewRepas() {
   h += '<p class="legend">Ce sont des estimations générales, pas un avis médical ni un régime personnalisé. Si tu as une allergie ou une intolérance, une maladie (diabète, reins, troubles alimentaires...) ou si tu es enceinte, demande l\'avis d\'un médecin ou d\'un diététicien avant de suivre ces repères. La créatine, si tu t\'y intéresses, est l\'un des compléments les mieux étudiés, mais c\'est un choix à discuter avec un professionnel.</p>';
   return h;
 }
+
+/* ---------- coach IA ---------- */
+var AI = (function () { try { return JSON.parse(lsGet('cds.ai') || '{}') || {}; } catch (e) { return {}; } })();
+var CHAT = (function () { try { var a = JSON.parse(lsGet('cds.chat') || '[]'); return Array.isArray(a) ? a : []; } catch (e) { return []; } })();
+function saveAI() { lsSet('cds.ai', JSON.stringify(AI)); }
+function saveChat() { lsSet('cds.chat', JSON.stringify(CHAT.slice(-30))); }
+function coachCtx() {
+  var p = prof(), n = now(), L = [], f = p ? freqInfo() : null;
+  L.push('Date : ' + C.fmtDateY(n) + '.');
+  if (p) L.push('Profil : ' + (p.sex === 'H' ? 'homme' : p.sex === 'F' ? 'femme' : 'autre') + ', ' + p.age + ' ans, ' + p.h + ' cm, ' + p.w + ' kg. Objectif : ' + C.GOALS.filter(function (x) { return x[0] === p.goal; })[0][1] + '. Fréquence visée : ' + f[1] + '.');
+  else L.push('Profil non renseigné.');
+  if (hasData()) {
+    var w = C.weekly(model, n, 1)[0]; L.push('Séances cette semaine : ' + (w ? w.sessions : 0) + (f ? ' sur ' + f[2] + ' à ' + f[3] + ' visées' : '') + '. Historique : ' + model.sessions.length + ' séances au total.');
+    L.push('Dernières séances : ' + model.sessions.slice(-6).map(function (se) { return C.fmtDate(se.t) + ' (' + Object.keys(se.ms).join(', ') + ', ' + se.nSets + ' séries)'; }).join(' ; ') + '.');
+    L.push('Muscles (récupération, séries sur 7 jours) : ' + C.MUSCLES.map(function (m) { var s = C.muscleStatus(model, m, n); return m + ' ' + s.label + ' ' + s.s7; }).join(' ; ') + '.');
+    var pl = C.progress(model, n).plateaus.slice(0, 4); if (pl.length) L.push('Exercices qui stagnent : ' + pl.map(function (r) { return r.ex.name; }).join(', ') + '.');
+    var dl = C.needsDeload(model, n); if (dl.suggest) L.push('Semaine allégée conseillée : ' + dl.why);
+    if (S.sel && S.sel.length) { var rec = C.recommend(model, S.sel, n, ropts()); L.push('Séance préparée (muscle principal : ' + S.sel[0] + ') : ' + rec.items.map(function (i) { return i.name + ' ' + i.sets + '×' + i.reps + (i.w ? ' à ' + i.w + ' kg' : ''); }).join(' ; ') + '.'); }
+  } else L.push('Pas d\'historique importé.');
+  var ev = activeEvent(); if (ev) L.push('Adaptation active : ' + ev.r + (ev.m ? ' (' + ev.m + ')' : '') + '. ' + EV_TEXT[ev.r]);
+  if (deloadOn()) L.push('Semaine allégée en cours.');
+  if (p) { var nu = C.nutrition(p, dayTypeAuto()); L.push('Repères alimentaires du jour : ' + nu.kcal + ' kcal, ' + nu.P + ' g de protéines, ' + nu.C + ' g de glucides, ' + nu.F + ' g de lipides.'); }
+  return L.join('\n');
+}
+function mdLite(t) {
+  var s = esc(t).replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').split('\n'), out = '', ul = false;
+  s.forEach(function (ln) {
+    var m = /^\s*[-•*]\s+(.*)$/.exec(ln);
+    if (m) { if (!ul) { out += '<ul>'; ul = true; } out += '<li>' + m[1] + '</li>'; }
+    else { if (ul) { out += '</ul>'; ul = false; } if (ln.trim()) out += '<p>' + ln + '</p>'; }
+  });
+  return out + (ul ? '</ul>' : '');
+}
+function splitSeance(t) {
+  var m = /\[SEANCE:\s*([^\]]+)\]\s*$/i.exec(t), ms = [];
+  if (m) m[1].split(',').forEach(function (x) { x = x.trim(); if (C.MUSCLES.indexOf(x) >= 0 && ms.indexOf(x) < 0) ms.push(x); });
+  return { text: t.replace(/\s*\[SEANCE:[^\]]*\]\s*$/i, '').trim(), ms: ms.slice(0, 3) };
+}
+function viewCoach() {
+  if (!AI.ok) return '<section class="sec"><div><h2>Coach IA</h2><p class="sub">Un assistant qui connaît ton profil et tes séances, organise ta semaine, adapte tes entraînements et répond à tes questions de musculation et d\'alimentation.</p></div>' +
+    '<div class="card tipcard"><div class="lab">Avant de commencer</div><ul><li>Pour répondre, l\'assistant envoie à un serveur, puis à Anthropic, ton profil, un résumé de tes dernières séances et tes messages. Rien d\'autre.</li><li>Il ne remplace ni un médecin, ni un diététicien, ni un vrai coach.</li><li>Tu peux effacer la conversation ou désactiver l\'assistant à tout moment.</li></ul></div>' +
+    '<button class="btn primary big" data-act="aion">J\'accepte et j\'active le coach IA</button></section>';
+  var quick = ['Organise ma semaine', 'Quelle séance dois-je faire aujourd\'hui ?', 'Pourquoi est-ce que je stagne ?', 'Que manger après ma séance ?'];
+  var h = '<section class="sec"><div><h2>Coach IA</h2><p class="sub">Pose ta question. Je connais ton profil et tes dernières séances.</p></div>';
+  if (!CHAT.length) h += '<div class="chips">' + quick.map(function (q) { return '<button class="chip go" data-act="aisend" data-q="' + esc(q) + '">' + esc(q) + '</button>'; }).join('') + '</div>';
+  h += '<div class="chat">' + CHAT.map(function (m, i) {
+    if (m.role === 'user') return '<div class="bub me">' + esc(m.content) + '</div>';
+    var sp = splitSeance(m.content);
+    return '<div class="bub ai">' + mdLite(sp.text) + (sp.ms.length && i === CHAT.length - 1 ? '<button class="btn primary" data-act="aiplan" data-ms="' + esc(sp.ms.join('|')) + '">Préparer : ' + sp.ms.map(esc).join(' + ') + '</button>' : '') + '</div>';
+  }).join('') + (S.chatBusy ? '<div class="bub ai wait">Le coach réfléchit…</div>' : '') + '</div>';
+  if (S.chatErr) h += '<div class="msg err">' + esc(S.chatErr) + '</div>';
+  if (S.chatNeedCode) h += '<div class="card"><div class="lab">Code d\'accès</div><p class="why">Cet assistant est protégé par un code.</p><input id="aicode" class="search" type="password" placeholder="Code d\'accès" value="' + esc(AI.code || '') + '" autocomplete="off"><button class="btn" data-act="aicode">Enregistrer le code</button></div>';
+  h += '<div class="chatin"><textarea id="chatin" rows="2" maxlength="1500" placeholder="Écris ton message au coach…">' + esc(S.draft || '') + '</textarea><button class="btn primary" data-act="aisend"' + (S.chatBusy ? ' disabled' : '') + '>Envoyer</button></div>' +
+    '<div class="row"><button class="btn" data-act="aiclear">Effacer la conversation</button><button class="btn" data-act="aioff">Désactiver</button></div>' +
+    '<p class="legend">Estimations et conseils généraux, pas un avis médical. Un vrai coach reste irremplaçable pour ta technique.</p></section>';
+  return h;
+}
+function askCoach(text) {
+  text = String(text || '').trim(); if (!text || S.chatBusy) return;
+  CHAT.push({ role: 'user', content: text.slice(0, 1500) }); saveChat(); S.draft = ''; S.chatBusy = true; S.chatErr = null; S.chatNeedCode = false; render(); scrollChat();
+  var hdr = { 'content-type': 'application/json' }; if (AI.code) hdr['x-coach-code'] = AI.code;
+  fetch(window.COACH_URL || '/api/coach', { method: 'POST', headers: hdr, body: JSON.stringify({ messages: CHAT.slice(-12), context: coachCtx() }) })
+    .then(function (r) { return r.json().catch(function () { return {}; }).then(function (d) { return { ok: r.ok, d: d, s: r.status }; }); })
+    .then(function (x) {
+      S.chatBusy = false;
+      if (x.ok && x.d.reply) { CHAT.push({ role: 'assistant', content: x.d.reply }); saveChat(); }
+      else { S.chatErr = (x.d && x.d.error) || 'Le coach IA est indisponible pour le moment.'; if (x.d && x.d.code === 'access') S.chatNeedCode = true; CHAT.pop(); S.draft = text; saveChat(); }
+      render(); scrollChat();
+    }, function () { S.chatBusy = false; S.chatErr = 'Pas de connexion, ou l\'assistant n\'est pas disponible depuis cette page.'; CHAT.pop(); S.draft = text; saveChat(); render(); });
+}
+function scrollChat() { setTimeout(function () { var c = document.querySelector('.chatin'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'end' }); }, 50); }
 function deloadOn() { try { var t = parseInt(localStorage.getItem('cds.deload') || '0', 10); return t && Date.now() - t < 7 * 864e5; } catch (e) { return false; } }
 function ropts() {
   var ev = activeEvent(), r = ev && ev.r;
@@ -2078,7 +2159,7 @@ function render() {
   $('meta').textContent = metaText();
   if (S.active) { $('meta').setAttribute('data-act', 'tab'); $('meta').setAttribute('data-t', 'seance'); } else { $('meta').removeAttribute('data-act'); $('meta').removeAttribute('data-t'); }
   $('tabs').innerHTML = TABS.map(function (t) { return '<button data-act="tab" data-t="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true">' + t[2] + '</svg>' + t[1] + '</button>'; }).join('');
-  var v = S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : viewData();
+  var v = S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData();
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
   Anim.mount();
@@ -2216,6 +2297,12 @@ document.addEventListener('click', function (e) {
   else if (a === 'nd') { S.nd = b.dataset.v; }
   else if (a === 'mv') { S.mv = S.mv || {}; S.mv[k] = (S.mv[k] || 0) + 1; }
   else if (a === 'plansel') { var pl = C.weekPlan(prof(), { avoid: injured() }); S.sel = pl[wi].slice(); S.done = {}; S.xtra = []; S.xk = null; S.evwarn = null; window.scrollTo(0, 0); }
+  else if (a === 'aion') { AI.ok = true; saveAI(); }
+  else if (a === 'aioff') { AI.ok = false; saveAI(); }
+  else if (a === 'aiclear') { CHAT.length = 0; saveChat(); S.chatErr = null; S.draft = ''; }
+  else if (a === 'aicode') { var ci = $('aicode'); AI.code = ci ? ci.value.trim() : ''; saveAI(); S.chatNeedCode = false; S.chatErr = null; }
+  else if (a === 'aiplan') { S.sel = String(b.dataset.ms || '').split('|').filter(Boolean); S.done = {}; S.xtra = []; S.xk = null; go('seance'); return; }
+  else if (a === 'aisend') { var ta = $('chatin'); askCoach(b.dataset.q || (ta ? ta.value : S.draft)); return; }
   else if (a === 'focus') { var fi = S.sel.indexOf(m); if (fi > 0) { S.sel.splice(fi, 1); S.sel.unshift(m); } S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'swap') { S.sel = [m]; S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'preset') { S.sel = C.PRESETS[wi][1].slice(); S.done = {}; S.xtra = []; S.xk = null; }
@@ -2269,6 +2356,7 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('input', function (e) {
   if (e.target.id === 'q') { S.q = e.target.value; render(); return; }
+  if (e.target.id === 'chatin') { S.draft = e.target.value; return; }
   var pm = { 'pf-age': 'age', 'pf-h': 'h', 'pf-w': 'w' }[e.target.id]; if (pm) { S.pf[pm] = e.target.value; return; }
   var f = e.target.getAttribute && e.target.getAttribute('data-f');
   if (f && S.active) {
