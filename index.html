@@ -1396,6 +1396,12 @@ function hasData() { return model.sessions.length > 0; }
 })();
 try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 var t0 = lsGet('cds.tab'); if (t0 && TABS.some(function (t) { return t[0] === t0; })) S.tab = t0;
+/* Actualiser la page : on revient là où on était (accueil, choix des muscles, séance en cours). */
+try {
+  var nv = JSON.parse(sessionStorage.getItem('cds.nav') || 'null');
+  if (nv && nv.home === false) { S.home = false; S.fresh = !!nv.fresh; if (nv.sel) S.sel = nv.sel; if (nv.done) S.done = nv.done; if (nv.xtra) S.xtra = nv.xtra; }
+} catch (e) {}
+function saveNav() { try { sessionStorage.setItem('cds.nav', JSON.stringify({ home: S.home, fresh: S.fresh, sel: S.sel, done: S.done, xtra: S.xtra })); } catch (e) {} }
 
 function now() { return C.nowNaive(); }
 function kg(w) { return C.fmtKg(w); }
@@ -1750,6 +1756,7 @@ function viewData() {
 }
 
 function render() {
+  saveNav();
   var lg = $('blogo'); if (lg && !lg.getAttribute('src')) lg.setAttribute('src', window.LOGO_URI);
   if (S.onb) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewOnboarding(); return; }
   if (S.home || (!hasData() && !S.active && !S.fresh)) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewHome(); return; }
