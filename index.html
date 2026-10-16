@@ -1810,6 +1810,8 @@ root.LIB = LIB;
 var C = window.Core, $ = function (id) { return document.getElementById(id); };
 var LIB = window.LIB, LIBMAP = {};
 LIB.forEach(function (e) { LIBMAP[e.n] = e; C.register(e.n, e.m, e.k, e.bw); });
+var CUSTOM = []; try { CUSTOM = JSON.parse(localStorage.getItem('cds.custom') || '[]'); if (!Array.isArray(CUSTOM)) CUSTOM = []; } catch (e) { CUSTOM = []; }
+CUSTOM.forEach(function (c) { if (c && c.n && C.MUSCLES.indexOf(c.m) >= 0) C.register(c.n, c.m, 'I', false); });
 try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) Anim.setPlaying(false); } catch (e) {}
 var TABS = [
   ['seance', 'Séance', '<path d="M3 12h18M6.5 8v8M17.5 8v8M10 6v12M14 6v12"/>'],
@@ -2603,6 +2605,8 @@ function whyHTML(name, names) {
   }).join('');
   return '<div class="msg tip"><div class="lab">Pourquoi cet exercice ?</div><ul>' + L.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' + (why2 ? '<div class="lab">Et pourquoi pas…</div><ul>' + why2 + '</ul>' : '') + '</div>';
 }
+function curMuscle(nm) { var e = LIBMAP[nm], X = model.ex[nm], c = CUSTOM.filter(function (x) { return x.n === nm; })[0]; return e ? e.m : X ? X.muscle : c ? c.m : ''; }
+function replaceExo(i, nm) { var oe = S.active.exos[i], ne = newExo(nm, Math.max(2, oe.sets.length)); ne.rest = oe.rest; ne.rir = oe.rir; S.active.exos[i] = ne; S.rep = null; S.wf = null; S.wy = null; saveActive(); }
 function altsFor(i) {
   var a = S.active, cur = a.exos[i], ce = LIBMAP[cur.name], X = model.ex[cur.name], m = ce ? ce.m : (X && X.muscle), kd = ce ? ce.k : (X && X.kind), lv = LV(), pr = prof() || {};
   if (!m) return [];
@@ -2621,7 +2625,9 @@ function viewWorkout() {
   a.exos.forEach(function (e, i) {
     h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
       (S.wy === e.name ? whyHTML(e.name, a.exos.map(function (x) { return x.name; })) : '') +
-      (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
+      (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="lab">Ou choisis librement</div><select class="search repsel" data-i="' + i + '" aria-label="Choisir un autre exercice"><option value="">Un exercice de la bibliothèque…</option>' + C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (x) { return x.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (x) { return '<option value="' + esc(x.n) + '">' + esc(x.n) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' +
+        '<div class="lab">Ou écris ton propre exercice</div><div class="fgrid"><input class="fin" id="rep-free" type="text" placeholder="Nom de l\'exercice" aria-label="Nom de ton exercice"><select class="fin" id="rep-mu" aria-label="Muscle travaillé">' + C.MUSCLES.map(function (m) { return '<option' + (m === curMuscle(e.name) ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div><button class="btn" data-act="wrepfree" data-i="' + i + '">Utiliser cet exercice</button>' +
+        '<div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
       (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
       '<div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' +
@@ -2764,7 +2770,17 @@ document.addEventListener('click', function (e) {
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
   else if (a === 'why') S.wy = S.wy === k ? null : k;
   else if (a === 'wrep') { S.rep = S.rep === wi ? null : wi; S.confirm = null; }
-  else if (a === 'wrepdo') { var oe = S.active.exos[wi], ne = newExo(k, Math.max(2, oe.sets.length)); ne.rest = oe.rest; ne.rir = oe.rir; S.active.exos[wi] = ne; S.rep = null; S.wf = null; saveActive(); }
+  else if (a === 'wrepdo') replaceExo(wi, k);
+  else if (a === 'wrepfree') {
+    var fnm = ($('rep-free').value || '').trim().replace(/\s+/g, ' ').slice(0, 60), fmu = $('rep-mu').value;
+    if (!fnm) { S.wmsg = 'Écris le nom de ton exercice.'; }
+    else if (S.active.exos.some(function (x, ix) { return ix !== wi && x.name.toLowerCase() === fnm.toLowerCase(); })) { S.wmsg = 'Cet exercice est déjà dans ta séance.'; }
+    else {
+      var known = Object.keys(model.ex).concat(LIB.map(function (x) { return x.n; })).filter(function (x) { return x.toLowerCase() === fnm.toLowerCase(); })[0];
+      if (!known) { CUSTOM.push({ n: fnm, m: fmu }); try { localStorage.setItem('cds.custom', JSON.stringify(CUSTOM)); } catch (e) {} C.register(fnm, fmu, 'I', false); }
+      S.wmsg = null; replaceExo(wi, known || fnm);
+    }
+  }
   else if (a === 'wrm') { if (S.confirm === 'rm' + wi) { S.active.exos.splice(wi, 1); S.rep = null; S.confirm = null; saveActive(); } else S.confirm = 'rm' + wi; }
   else if (a === 'wdel') { var ex1 = S.active.exos[wi]; ex1.sets.splice(wj, 1); if (!ex1.sets.length) S.active.exos.splice(wi, 1); saveActive(); }
   else if (a === 'wabort') { if (S.confirm === 'abort') { S.active = null; saveActive(); unwake(); S.confirm = null; } else S.confirm = 'abort'; }
@@ -2793,11 +2809,11 @@ document.addEventListener('input', function (e) {
   }
 });
 document.addEventListener('change', function (e) {
+  if (e.target.classList && e.target.classList.contains('repsel')) { var rv = e.target.value, ri = +e.target.getAttribute('data-i'); if (rv && S.active && S.active.exos[ri] && !S.active.exos.some(function (x) { return x.name === rv; })) { replaceExo(ri, rv); render(); } return; }
   if (e.target.id === 'addex') {
     var nm = e.target.value, X = model && model.ex[nm], le = LIBMAP[nm];
     if (nm && S.active && !S.active.exos.some(function (x) { return x.name === nm; })) {
-      var b0 = X ? X.hist[X.hist.length - 1].best : { w: 0, r: le && le.bw ? 8 : 10 };
-      S.active.exos.push({ name: nm, bw: !!(X ? X.bw : le && le.bw), last: X ? C.setLine(X.hist[X.hist.length - 1].sets) : '', sets: [0, 1, 2].map(function () { return { w: b0.w, r: b0.r, ok: false }; }) });
+      var ne0 = newExo(nm, 0); if (X) ne0.last = C.setLine(X.hist[X.hist.length - 1].sets); S.active.exos.push(ne0);
       saveActive(); render();
     }
     return;
