@@ -574,6 +574,66 @@ function weekly(model, now, n) {
 }
 
 
+
+/* ---------- niveau : tests de répétitions max, historique, rapport poids / taille ---------- */
+var LEVELS = ['debutant', 'inter', 'avance'], LEVEL_LABEL = { debutant: 'Débutant', inter: 'Intermédiaire', avance: 'Avancé' };
+var TESTS = [
+  ['push', 'Pompes', 'reps, le corps aligné', [[10, 25], [6, 16]]],
+  ['pull', 'Tractions', 'reps, 0 si tu n\'y arrives pas', [[3, 10], [1, 5]]],
+  ['squat', 'Squats sans charge', 'reps, jusqu\'à la cuisse parallèle', [[20, 40], [20, 40]]],
+  ['dips', 'Dips sur banc', 'reps, jambes tendues', [[10, 25], [8, 20]]],
+  ['plank', 'Gainage sur les avant-bras', 'secondes', [[30, 90], [25, 75]]]
+];
+function bmi(p) { return p.w / Math.pow(p.h / 100, 2); }
+function bmiInfo(p) {
+  var b = bmi(p), r = Math.round(b * 10) / 10;
+  if (b < 18.5) return { k: 'mince', bmi: r, t: 'Ton rapport poids / taille est bas : on construit en douceur avec des exercices de base, peu de cardio et assez à manger (voir l\'onglet Repas).' };
+  if (b >= 30) return { k: 'fort', bmi: r, t: 'On commence en douceur : exercices guidés et stables, séances de 40 à 50 minutes, marche quotidienne. Les fentes et les montées sur banc viendront plus tard.' };
+  if (b >= 25) return { k: 'surpoids', bmi: r, t: 'Rapport poids / taille un peu élevé : renforcement général 3 fois par semaine et de la marche pour bien démarrer.' };
+  return { k: 'normal', bmi: r, t: '' };
+}
+function testLevel(p) {
+  if (!p || !p.t) return null;
+  var sx = p.sex === 'F' ? 1 : 0, tot = 0, n = 0;
+  TESTS.forEach(function (T) {
+    var v = p.t[T[0]]; if (v === undefined || v === null || v === '' || isNaN(v)) return;
+    var th = T[3][sx]; n++; tot += v >= th[1] ? 2 : v >= th[0] ? 1 : 0;
+  });
+  if (!n) return null;
+  var m = tot / n; return m < 0.5 ? 'debutant' : m < 1.5 ? 'inter' : 'avance';
+}
+function histLevel(model) {
+  if (!model || !model.sessions.length) return null;
+  var n = model.sessions.length, span = (model.last - model.first) / DAY;
+  return n >= 80 && span >= 270 ? 'avance' : n >= 24 ? 'inter' : null;
+}
+function level(p, model) {
+  if (p && p.lvl && LEVELS.indexOf(p.lvl) >= 0) return p.lvl;
+  var a = (p && testLevel(p)) || 'debutant', b = histLevel(model);
+  return b && LEVELS.indexOf(b) > LEVELS.indexOf(a) ? b : a;
+}
+/* un débutant évite d'abord les barres lourdes et les mouvements exigeants (il y viendra) */
+function noviceBlocked(name, kind, p) {
+  if (/barre/i.test(name) && !/curl/i.test(name)) return true;
+  if (/prise serrée|^Développé couché$|^Squat$|^Rowing$/i.test(name)) return true;
+  if (/^(Soulevé de terre|Good morning|Rack pull|Roue abdominale|Curl nordique|Relevé de jambes suspendu)/i.test(name)) return true;
+  var t = (p && p.t) || {};
+  if (/^Tractions$/.test(name) && !(t.pull >= 3)) return true;
+  if (/^Dips$/.test(name) && !(t.dips >= 10)) return true;
+  if (p && bmi(p) >= 30 && /^(Fentes|Step-up|Split squat|Fente latérale)/i.test(name)) return true;
+  return false;
+}
+/* séries et reps de départ pour un exercice jamais fait, selon le niveau et les tests */
+function starter(name, kind, bw, p, lv) {
+  var t = (p && p.t) || {}, comp = kind === 'C';
+  var o = lv === 'debutant' ? { sets: comp ? 3 : 2, reps: comp ? 12 : 15 } : lv === 'inter' ? { sets: 3, reps: comp ? 10 : 12 } : { sets: comp ? 4 : 3, reps: comp ? 8 : 10 };
+  if (bw) {
+    var ref = /^Pompes/.test(name) ? t.push : /^Tractions/.test(name) ? t.pull : /^Dips/.test(name) ? t.dips : /^Squat/.test(name) ? t.squat : null;
+    o.reps = ref >= 0 && ref !== null && ref !== undefined ? Math.max(3, Math.round(ref * 0.65)) : lv === 'debutant' ? 8 : 10;
+  }
+  return o;
+}
+
 /* ---------- plan de semaine ---------- */
 var SPLITS = {
   3: [['Quadriceps', 'Pectoraux', 'Dos'], ['Dos', 'Épaules', 'Ischios'], ['Pectoraux', 'Fessiers', 'Biceps']],
@@ -582,7 +642,7 @@ var SPLITS = {
 };
 function weekPlan(p, opts) {
   opts = opts || {};
-  var n = p.freq === '1-3' ? 3 : p.freq === '3-5' ? 4 : 5;
+  var n = opts.level === 'debutant' ? 3 : p.freq === '1-3' ? 3 : p.freq === '3-5' ? 4 : 5;
   var base = SPLITS[n] || SPLITS[3];
   return base.map(function (day) {
     var d = day.filter(function (m) { return m !== opts.avoid; });
@@ -784,10 +844,11 @@ function needsDeload(model, now) {
 }
 function fmtRest(x) { return x < 90 ? x + ' s' : Math.floor(x / 60) + ' min' + (x % 60 ? ' ' + (x % 60) : ''); }
 function method(it, goal, ctx) {
+  ctx = ctx || {};
   var heavy = it.kind === 'C' && rank(it.name, it.kind) >= 140, comp = it.kind === 'C', g = goal || 'maintien';
   var rest = heavy ? (g === 'perte' ? [90, 120] : [150, 240]) : comp ? (g === 'perte' ? [60, 90] : g === 'muscle' ? [90, 150] : [90, 120]) : (g === 'perte' ? [45, 60] : [60, 90]);
-  var rir = ctx.deload ? '4 : aucune série difficile' : ctx.easy ? '2 à 3 (reste confortable)' : heavy ? '2 (stoppe 2 reps avant l\'échec)' : comp ? '1 à 2' : '0 à 1 (la dernière série peut aller à l\'échec)';
-  var tech = ['Descente contrôlée sur 2 à 3 s, puis remonte avec intention.'];
+  var rir = ctx.deload ? '4 : aucune série difficile' : ctx.level === 'debutant' ? '3 : tu pourrais encore faire 3 reps' : ctx.easy ? '2 à 3 (reste confortable)' : heavy ? '2 (stoppe 2 reps avant l\'échec)' : comp ? '1 à 2' : '0 à 1 (la dernière série peut aller à l\'échec)';
+  var tech = ['Descente contrôlée sur 2 à 3 s, puis remonte avec intention.']; if (ctx.level === 'debutant') tech.push('Apprends le geste avec une charge légère, et monte seulement quand les dernières reps restent propres.');
   if (!it.bw && heavy && !ctx.deload && g !== 'perte') tech.push('Série lourde en premier, puis les suivantes avec ~8 % de moins pour garder des reps de qualité.');
   if (!comp && STRETCH.test(it.name)) tech.push('Descends bien dans l\'étirement du muscle : le travail en allongement est très efficace.');
   if (ctx.finisher && g === 'muscle' && !ctx.deload) tech.push('Finition : après la dernière série, enchaîne une série dégressive (−20 % de charge, jusqu\'à l\'échec).');
@@ -797,8 +858,9 @@ function method(it, goal, ctx) {
 /* muscles : tableau de noms. Retourne { items, warnings, rested } */
 /* Force demandée : les gros mouvements lourds d'abord (soulevé de terre, squat, développé couché barre...), l'isolation à la fin. */
 var MAX_EX = 6;
-function rank(name, kind) {
+function rank(name, kind, lv) {
   var r = kind === 'C' ? 100 : 0;
+  if (lv === 'debutant') { if (/\(machine\)|poulie|^Presse|^Hack|^Leg /i.test(name)) r += 40; else if (/haltère|goblet/i.test(name)) r += 25; else if (/Smith/i.test(name)) r += 20; return r; }
   if (/^(Soulevé de terre|Squat \(barre\)|Développé (couché|incliné|militaire) \(barre\)|Rowing barre|Hip thrust|Good morning)/i.test(name)) r += 40;
   else if (/^(Dips|Tractions|Hack squat|Presse|Rowing T-bar|Split squat|Fentes)/i.test(name)) r += 30;
   if (/\(barre\)|barre EZ/i.test(name)) r += 20; else if (/haltère/i.test(name)) r += 10; else if (/\(machine\)|poulie/i.test(name)) r += 2;
@@ -831,7 +893,7 @@ function recommend(model, muscles, now, opts) {
   function take(i) { var P = per[i], kd = slotKind(P.n), alt = kd === 'C' ? 'I' : 'C', o = P[kd].shift() || P[alt].shift(); if (o) { P.n++; picked[i].push(o); } return !!o; }
   var MX = opts.maxEx || MAX_EX;
   per.forEach(function (P, i) { var q = quota(per.length, i, MX); for (var k = 0; k < q; k++) if (!take(i)) break; });
-  picked = picked.map(function (l) { return l.sort(function (a, b) { return rank(b.X.name, b.X.kind) - rank(a.X.name, a.X.kind); }); });
+  picked = picked.map(function (l) { return l.sort(function (a, b) { return rank(b.X.name, b.X.kind, opts.level) - rank(a.X.name, a.X.kind, opts.level); }); });
   picked = picked.reduce(function (t, l) { return t.concat(l); }, []);
   var items = picked.map(function (o) { return planExo(o.X, now); }), vol = VOL[opts.goal] || VOL.maintien, lastIso = {};
   items.forEach(function (it, i) { if (it.kind !== 'C') lastIso[it.muscle] = i; });
@@ -848,7 +910,8 @@ function recommend(model, muscles, now, opts) {
     } else if (stt.avg4 > vol[1] && it.sets > 2) {
       it.sets -= 1; it.vnote = 'Tu fais déjà ' + Math.round(stt.avg4) + ' séries / semaine sur ' + it.muscle + ' (au-delà de ' + vol[1] + ') : une série de moins pour bien récupérer.';
     }
-    method(it, opts.goal, { easy: opts.easy, deload: opts.deload, finisher: isMain && lastIso[it.muscle] === i && model.sessions.length >= 30 });
+    if (opts.level === 'debutant') it.sets = Math.min(it.sets, 3);
+    method(it, opts.goal, { level: opts.level, easy: opts.easy, deload: opts.deload, finisher: isMain && lastIso[it.muscle] === i && model.sessions.length >= 30 });
   });
   var first = items.filter(function (x) { return x.kind === 'C' && !x.bw && x.w >= 20; })[0];
   if (first) {
@@ -952,7 +1015,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, weekPlan: weekPlan, weekMenu: weekMenu, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, weekPlan: weekPlan, weekMenu: weekMenu, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -1726,6 +1789,7 @@ function readProfile() { try { var s = lsGet('cds.profile'); return s ? JSON.par
 var PROFILE = readProfile();
 if (PROFILE && !C.profileOk(PROFILE)) { PROFILE = null; lsDel('cds.profile'); }
 function prof() { return C.profileOk(PROFILE) ? PROFILE : null; }
+function LV() { if (!prof() && model && model.sessions.length) return C.histLevel(model) || 'inter'; return C.level(prof() || {}, model); }
 function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
 function readLog() { try { var s = lsGet('cds.log'); var a = s ? JSON.parse(s) : []; return Array.isArray(a) ? a : []; } catch (e) { return []; } }
 function readActive() { try { var s = lsGet('cds.active'); return s ? JSON.parse(s) : null; } catch (e) { return null; } }
@@ -1834,9 +1898,14 @@ function profileCard() {
   if (!p) return '<section class="sec"><div><h2>Mon profil</h2><p class="sub">Ajoute ton âge, ton gabarit et ton objectif pour des conseils adaptés : cardio, repos, fréquence et besoins estimés.</p></div><button class="btn primary" data-act="editprofile">Compléter mon profil</button>' + profileBackup() + '</section>';
   var e = C.estimate(p), g = C.GOALS.filter(function (x) { return x[0] === p.goal; })[0][1], f = freqInfo(), sx = C.SEXES.filter(function (x) { return x[0] === p.sex; })[0][1];
   var nf = function (n) { return n.toLocaleString('fr-FR'); };
-  return '<section class="sec"><div><h2>Mon profil</h2><p class="sub">' + esc(sx) + ' · ' + p.age + ' ans · ' + p.h + ' cm · ' + String(p.w).replace('.', ',') + ' kg<br>' + esc(g) + ' · ' + esc(f[1]) + '</p></div>' +
+  return '<section class="sec"><div><h2>Mon profil</h2><p class="sub">' + esc(sx) + ' · ' + p.age + ' ans · ' + p.h + ' cm · ' + String(p.w).replace('.', ',') + ' kg<br>' + esc(g) + ' · ' + esc(f[1]) + '</p></div>' + levelCard(p) +
     '<div class="est"><div class="stat"><b>' + nf(e.tdee) + '</b><span>kcal / jour pour maintenir ton poids</span></div><div class="stat"><b>' + nf(e.kcal) + '</b><span>kcal / jour pour ton objectif</span></div><div class="stat"><b>' + e.protein + ' g</b><span>de protéines / jour</span></div><div class="stat"><b>' + e.z2[0] + '-' + e.z2[1] + '</b><span>bpm pour le cardio modéré</span></div></div>' +
     '<p class="legend">Estimations générales, pas un avis médical. En cas de problème de santé, demande l\'avis d\'un professionnel.</p><div><button class="btn" data-act="editprofile">Modifier mon profil</button></div>' + profileBackup() + '</section>';
+}
+function levelCard(p) {
+  var lv = LV(), bi = C.bmiInfo(p), src = p.lvl ? 'choisi par toi' : C.testLevel(p) ? 'calculé d\'après tes tests' : hasData() && C.histLevel(model) ? 'calculé d\'après ton historique' : 'estimé d\'après ton rapport poids / taille (IMC ' + String(bi.bmi).replace('.', ',') + ')';
+  var how = lv === 'debutant' ? 'Machines et haltères d\'abord, 2 à 3 séries de 8 à 15 reps, 3 séances corps entier par semaine, 3 reps en réserve pour apprendre les gestes. Les barres lourdes viendront plus tard.' : lv === 'inter' ? 'Mélange barres, haltères et machines, 3 séries de 8 à 12 reps, charges qui montent d\'une séance à l\'autre.' : 'Barres lourdes, 3 à 4 séries en reps basses sur les mouvements de base, volume ajusté par muscle.';
+  return '<div class="msg tip"><div class="lab">Niveau : ' + C.LEVEL_LABEL[lv] + '</div><p class="why">' + esc(how) + ' Niveau ' + src + '.' + (bi.t && lv === 'debutant' && !p.lvl ? ' ' + esc(bi.t) : '') + '</p></div>';
 }
 function viewOnboarding() {
   var d = S.pf, edit = !!(S.onb && S.onb.edit);
@@ -1848,6 +1917,8 @@ function viewOnboarding() {
     '<label>Taille<input class="fin" id="pf-h" type="number" inputmode="numeric" min="120" max="230" placeholder="cm" value="' + esc(d.h == null ? '' : d.h) + '"></label>' +
     '<label>Poids<input class="fin" id="pf-w" type="text" inputmode="decimal" placeholder="kg" value="' + esc(d.w == null ? '' : d.w) + '"></label></div>' +
     '<div class="lab">Séances par semaine</div>' + chips('freq', C.FREQS.map(function (f) { return [f[0], f[1]]; })) + (d.avg ? '<p class="legend">Prérempli d\'après ton historique : environ ' + String(d.avg).replace('.', ',') + ' séance' + (d.avg >= 2 ? 's' : '') + ' par semaine.</p>' : '') +
+    '<div class="lab">Ton niveau</div><p class="legend">Combien de répétitions fais-tu d\'affilée, sans forcer jusqu\'à l\'échec ? Laisse vide si tu ne sais pas : on part alors de ton rapport poids / taille, en douceur.</p><div class="fgrid">' + C.TESTS.map(function (T) { return '<label>' + T[1] + '<input class="fin" id="pf-t-' + T[0] + '" type="number" inputmode="numeric" min="0" max="300" placeholder="' + (T[0] === 'plank' ? 'sec' : 'reps') + '" value="' + esc((d.t && d.t[T[0]] != null) ? d.t[T[0]] : '') + '"></label>'; }).join('') + '</div>' +
+    '<div class="lab">Choisir mon niveau</div><div class="chips"><button class="chip" data-act="pf" data-f="lvl" data-v="" aria-pressed="' + (!d.lvl) + '">Automatique</button>' + C.LEVELS.map(function (l) { return '<button class="chip" data-act="pf" data-f="lvl" data-v="' + l + '" aria-pressed="' + (d.lvl === l) + '">' + C.LEVEL_LABEL[l] + '</button>'; }).join('') + '</div>' +
     '<div class="lab">Ton objectif</div><div class="opts">' + C.GOALS.map(function (g) { return '<button class="opt" data-act="pf" data-f="goal" data-v="' + g[0] + '" aria-pressed="' + (d.goal === g[0]) + '"><b>' + g[1] + '</b><span>' + g[2] + '</span></button>'; }).join('') + '</div></div>' +
     '<button class="btn primary big" data-act="pfsave">' + (edit ? 'Enregistrer' : 'Enregistrer et continuer') + '</button>' +
     '<button class="btn" data-act="pfskip">' + (edit ? 'Annuler' : 'Passer pour l\'instant') + '</button>' + profileBackup() + '</section>';
@@ -1857,15 +1928,19 @@ function guessFreq() {
   var avg = tot / w.length;
   return [avg < 3 ? '1-3' : avg < 5 ? '3-5' : '5-7', Math.round(avg * 10) / 10];
 }
-function newPf() { var o = {}; if (hasData()) { var g = guessFreq(); if (g[1] > 0) { o.freq = g[0]; o.avg = g[1]; } } return o; }
-function profCode(p) { try { return 'BYC1.' + btoa(unescape(encodeURIComponent(JSON.stringify({ a: p.age, s: p.sex, h: p.h, w: p.w, f: p.freq, g: p.goal })))); } catch (e) { return ''; } }
+function newPf() { var o = {t: {}}; if (hasData()) { var g = guessFreq(); if (g[1] > 0) { o.freq = g[0]; o.avg = g[1]; } } return o; }
+function profCode(p) { try { return 'BYC1.' + btoa(unescape(encodeURIComponent(JSON.stringify({ a: p.age, s: p.sex, h: p.h, w: p.w, f: p.freq, g: p.goal, t: p.t, l: p.lvl })))); } catch (e) { return ''; } }
 function parseProfile(txt) {
   txt = String(txt).trim(); var o = null;
   try {
-    if (txt.indexOf('BYC1.') === 0) { var j = JSON.parse(decodeURIComponent(escape(atob(txt.slice(5))))); o = { age: j.a, sex: j.s, h: j.h, w: j.w, freq: j.f, goal: j.g }; }
+    if (txt.indexOf('BYC1.') === 0) { var j = JSON.parse(decodeURIComponent(escape(atob(txt.slice(5))))); o = { age: j.a, sex: j.s, h: j.h, w: j.w, freq: j.f, goal: j.g, t: j.t, lvl: j.l }; }
     else if (txt.charAt(0) === '{') { var q = JSON.parse(txt); if (q.app === 'BeYourCoach') o = q.profile; }
   } catch (e) { o = null; }
-  return C.profileOk(o) ? { age: +o.age, sex: o.sex, h: +o.h, w: +o.w, freq: o.freq, goal: o.goal } : null;
+  if (!C.profileOk(o)) return null;
+  var r = { age: +o.age, sex: o.sex, h: +o.h, w: +o.w, freq: o.freq, goal: o.goal };
+  if (o.t && typeof o.t === 'object') { var t2 = {}; C.TESTS.forEach(function (T) { var v = +o.t[T[0]]; if (o.t[T[0]] != null && v >= 0 && v <= 300) t2[T[0]] = Math.round(v); }); if (Object.keys(t2).length) r.t = t2; }
+  if (C.LEVELS.indexOf(o.lvl) >= 0) r.lvl = o.lvl;
+  return r;
 }
 function applyProfile(np) {
   var on = S.onb || {}; PROFILE = np; lsSet('cds.profile', JSON.stringify(np)); S.onb = null; S.pfErr = null; S.skipped = false;
@@ -1924,7 +1999,8 @@ function autoXtra() {
   });
 }
 function newFor(m) {
-  return LIB.filter(function (e) { return e.m === m && !model.ex[e.n]; }).sort(function (a, b) { return C.rank(b.n, b.k) - C.rank(a.n, a.k); }).slice(0, 6);
+  var lv = LV(), pr = prof() || {};
+  return LIB.filter(function (e) { return e.m === m && !model.ex[e.n] && !(lv === 'debutant' && C.noviceBlocked(e.n, e.k, pr)); }).sort(function (a, b) { return C.rank(b.n, b.k, lv) - C.rank(a.n, a.k, lv); }).slice(0, 6);
 }
 function companionsSection(byM) {
   if (!S.sel.length || S.sel.length >= 3) return '';
@@ -2004,7 +2080,7 @@ function evCard() {
 /* ---------- programme de la semaine ---------- */
 function planCard() {
   var p = prof(); if (!p || !hasData()) return '';
-  var plan = C.weekPlan(p, { avoid: injured() }), w = C.weekly(model, now(), 1), nS = w[w.length - 1] ? w[w.length - 1].sessions : 0, nxt = nS % plan.length;
+  var plan = C.weekPlan(p, { avoid: injured(), level: LV() }), w = C.weekly(model, now(), 1), nS = w[w.length - 1] ? w[w.length - 1].sessions : 0, nxt = nS % plan.length;
   return '<section class="sec"><div><h2>Programme de la semaine</h2><p class="sub">' + plan.length + ' séances types pour ta fréquence (' + esc(freqInfo()[1]) + '), dans l\'ordre. La suite conseillée est mise en avant, d\'après ce que tu as déjà fait cette semaine.</p></div>' +
     '<div class="plan">' + plan.map(function (d, i) {
       var done = i < nS && nS < plan.length, next = i === nxt;
@@ -2175,7 +2251,7 @@ function scrollChat() { setTimeout(function () { var c = document.querySelector(
 function deloadOn() { try { var t = parseInt(localStorage.getItem('cds.deload') || '0', 10); return t && Date.now() - t < 7 * 864e5; } catch (e) { return false; } }
 function ropts() {
   var ev = activeEvent(), r = ev && ev.r;
-  return { goal: PROFILE && !PROFILE.skip ? PROFILE.goal : null, deload: deloadOn() || r === 'maladie' || r === 'voyage', maxEx: r === 'temps' || r === 'motivation' ? 4 : 0, easy: r === 'fatigue' || r === 'blessure' || r === 'autre' };
+  return { level: LV(), goal: PROFILE && !PROFILE.skip ? PROFILE.goal : null, deload: deloadOn() || r === 'maladie' || r === 'voyage', maxEx: r === 'temps' || r === 'motivation' ? 4 : 0, easy: r === 'fatigue' || r === 'blessure' || r === 'autre' };
 }
 function deloadCard() {
   if (deloadOn()) return '<div class="msg tip"><div class="lab">Semaine allégée en cours</div><p class="why">Moins de séries, charges −10 %, rien de difficile. Tu reviens à ton rythme normal ensuite.</p><button class="btn" data-act="deload" data-v="0">Revenir au programme normal</button></div>';
@@ -2415,7 +2491,8 @@ function startWorkout() {
   }) };
   S.xtra.forEach(function (nm) {
     var e = LIBMAP[nm]; if (!e || S.active.exos.some(function (x) { return x.name === nm; })) return;
-    S.active.exos.push({ name: nm, bw: e.bw, last: '', sets: [0, 1, 2].map(function () { return { w: 0, r: e.bw ? 8 : 10, ok: false }; }) });
+    var st = C.starter(nm, e.k, e.bw, prof() || {}, LV());
+    S.active.exos.push({ name: nm, bw: e.bw, last: LV() === 'debutant' && !e.bw ? 'Première fois : choisis une charge légère, avec 3 reps en réserve.' : '', sets: []. concat(Array(st.sets).fill(0)).map(function () { return { w: 0, r: st.reps, ok: false }; }) });
   });
   S.active.exos.sort(function (a, b) { var ea = LIBMAP[a.name], eb = LIBMAP[b.name], ka = (model.ex[a.name] || ea || {}).kind || (ea && ea.k), kb = (model.ex[b.name] || eb || {}).kind || (eb && eb.k); var ma = (model.ex[a.name] || ea || {}).muscle || (ea && ea.m), mb = (model.ex[b.name] || eb || {}).muscle || (eb && eb.m); var pa = ma === S.sel[0] ? 1000 : 0, pb = mb === S.sel[0] ? 1000 : 0; return (pb + C.rank(b.name, kb)) - (pa + C.rank(a.name, ka)); });
   S.xtra = []; S.xk = null; S.wf = null; S.wmsg = null; S.summary = null; saveActive(); wake();
@@ -2519,7 +2596,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'rt') { S.rt = b.dataset.v; window.scrollTo(0, 0); }
   else if (a === 'nd') { S.nd = b.dataset.v; }
   else if (a === 'mv') { S.mv = S.mv || {}; S.mv[k] = (S.mv[k] || 0) + 1; }
-  else if (a === 'plansel') { var pl = C.weekPlan(prof(), { avoid: injured() }); S.sel = pl[wi].slice(); S.done = {}; S.xtra = []; S.xk = null; S.evwarn = null; window.scrollTo(0, 0); }
+  else if (a === 'plansel') { var pl = C.weekPlan(prof(), { avoid: injured(), level: LV() }); S.sel = pl[wi].slice(); S.done = {}; S.xtra = []; S.xk = null; S.evwarn = null; window.scrollTo(0, 0); }
   else if (a === 'aion') { AI.ok = true; saveAI(); }
   else if (a === 'aioff') { AI.ok = false; saveAI(); }
   else if (a === 'aiclear') { CHAT.length = 0; saveChat(); S.chatErr = null; S.draft = ''; }
@@ -2544,13 +2621,14 @@ document.addEventListener('click', function (e) {
   else if (a === 'enter') { S.msg = null; if (!PROFILE && !S.skipped) { S.onb = { next: 'enter' }; S.pf = newPf(); S.pfErr = null; render(); return; } S.home = false; go(S.tab === 'data' ? 'seance' : S.tab); return; }
   else if (a === 'blank') { if (!PROFILE && !S.skipped) { S.onb = { next: 'blank' }; S.pf = newPf(); S.pfErr = null; render(); return; } startBlank(); return; }
   else if (a === 'editprofile') { S.onb = { edit: true, from: S.home ? 'home' : 'data' }; S.pf = PROFILE && !PROFILE.skip ? JSON.parse(JSON.stringify(PROFILE)) : newPf(); S.pfErr = null; }
-  else if (a === 'pf') { S.pf[b.getAttribute('data-f')] = b.getAttribute('data-v'); }
+  else if (a === 'pf') { S.pf[b.getAttribute('data-f')] = b.getAttribute('data-v'); if (b.getAttribute('data-f') === 'lvl' && !b.getAttribute('data-v')) delete S.pf.lvl; }
   else if (a === 'pfskip') {
     var nx = S.onb && S.onb.next, ed = S.onb && S.onb.edit, fh = S.onb && S.onb.from === 'home'; S.onb = null; S.skipped = true;
     if (nx === 'blank') { startBlank(); return; } if (nx === 'enter') { S.home = false; go('seance'); return; } if (ed) { if (fh) { S.home = true; } else { go('data'); return; } }
   }
   else if (a === 'pfsave') {
     var d = S.pf, np = { age: parseInt(d.age, 10), h: parseInt(d.h, 10), w: parseFloat(String(d.w).replace(',', '.')), sex: d.sex, freq: d.freq, goal: d.goal };
+    var tt = {}; C.TESTS.forEach(function (T) { var v = d.t && d.t[T[0]]; if (v !== undefined && v !== null && v !== '' && !isNaN(+v) && +v >= 0 && +v <= 300) tt[T[0]] = Math.round(+v); }); if (Object.keys(tt).length) np.t = tt; if (d.lvl && C.LEVELS.indexOf(d.lvl) >= 0) np.lvl = d.lvl;
     if (!C.profileOk(np)) { S.pfErr = !np.sex ? 'Choisis une option pour le sexe.' : !(np.age >= 14 && np.age <= 90) ? 'Indique un âge entre 14 et 90 ans.' : !(np.h >= 120 && np.h <= 230) ? 'Indique ta taille en cm, entre 120 et 230.' : !(np.w >= 30 && np.w <= 250) ? 'Indique ton poids en kg, entre 30 et 250.' : !np.freq ? 'Choisis ta fréquence d\'entraînement.' : 'Choisis ton objectif.'; }
     else { applyProfile(np); return; }
   }
@@ -2582,6 +2660,7 @@ document.addEventListener('input', function (e) {
   if (e.target.id === 'q') { S.q = e.target.value; render(); return; }
   if (e.target.id === 'chatin') { S.draft = e.target.value; return; }
   var pm = { 'pf-age': 'age', 'pf-h': 'h', 'pf-w': 'w' }[e.target.id]; if (pm) { S.pf[pm] = e.target.value; return; }
+  if (/^pf-t-/.test(e.target.id)) { S.pf.t = S.pf.t || {}; S.pf.t[e.target.id.slice(5)] = e.target.value; return; }
   var f = e.target.getAttribute && e.target.getAttribute('data-f');
   if (f && S.active) {
     var s = S.active.exos[+e.target.getAttribute('data-i')].sets[+e.target.getAttribute('data-j')], v = parseFloat(String(e.target.value).replace(',', '.'));
