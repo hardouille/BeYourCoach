@@ -2320,6 +2320,7 @@ function viewSeance() {
       (it.warm ? '<div class="warm">Échauffement : <b>' + it.warm + '</b></div>' : '') +
       '<div class="hist">' + C.fmtDate(it.lastDate) + ' : ' + esc(it.lastLine) + '</div>' +
       (it.plateau ? '<div><span class="pill flat">Stagne depuis 6 semaines</span></div>' : '') +
+       '<div><button class="btn" data-act="why" data-k="' + esc(it.name) + '" aria-expanded="' + (S.wy === it.name) + '">Pourquoi celui-là ?</button></div>' + (S.wy === it.name ? whyHTML(it.name, rec.items.map(function (x) { return x.name; }).concat(S.xtra)) : '') +
       (LIBMAP[it.name] ? '<div><button class="btn" data-act="sfiche" data-k="' + esc(it.name) + '" aria-expanded="' + (S.sf === it.name) + '">' + (S.sf === it.name ? 'Masquer la fiche' : 'Voir la fiche') + '</button></div>' + (S.sf === it.name ? ficheHTML(it.name) : '') : '') + '</article>';
   }).join('') + (rec.items.length ? '</section>' : '') + varietySection() + adviceCard('Après la séance') + '<button class="btn primary big" data-act="start">Démarrer l\'entraînement</button>';
   return h;
@@ -2398,7 +2399,7 @@ function varietySection() {
   return '<section class="sec"><div><h2>' + (fresh ? 'Pour démarrer' : 'Pour varier') + '</h2><p class="sub">' + (fresh ? 'Tu n\'as encore rien fait pour ' + miss.map(esc).join(', ') + ' : voici une première séance, déjà ajoutée. Retire ce que tu ne veux pas.' : 'Des exercices que tu n\'as encore jamais faits dans ton historique.') + '</p></div>' + pick.map(function (e) {
     var on = S.xtra.indexOf(e.n) >= 0;
     return '<article class="card"><div class="row"><div><div class="ename">' + esc(e.n) + '</div><div class="emu">' + e.m + ' · ' + esc(e.eq) + '</div></div><button class="btn" data-act="addx" data-k="' + esc(e.n) + '" aria-pressed="' + on + '">' + (on ? 'Ajouté' : 'Ajouter') + '</button></div>' +
-      '<p class="why">' + esc(e.why) + '</p><div><button class="btn" data-act="goto" data-k="' + esc(e.n) + '">Voir la fiche</button></div></article>';
+      '<p class="why">' + esc(e.why) + '</p><div class="chips"><button class="btn" data-act="goto" data-k="' + esc(e.n) + '">Voir la fiche</button><button class="btn" data-act="why" data-k="' + esc(e.n) + '" aria-expanded="' + (S.wy === e.n) + '">Pourquoi celui-là ?</button></div>' + (S.wy === e.n ? whyHTML(e.n, S.xtra) : '') + '</article>';
   }).join('') + '</section>';
 }
 function viewExos() {
@@ -2519,6 +2520,24 @@ function newExo(nm, nsets) {
   var sets = []; for (var i = 0; i < ns; i++) sets.push({ w: w, r: r, ok: false });
   return { name: nm, bw: e ? e.bw : !!(X && X.bw), last: last, hint: hint, sets: sets };
 }
+function whyHTML(name, names) {
+  var e = LIBMAP[name], X = model.ex[name], m = e ? e.m : X && X.muscle, kd = e ? e.k : X && X.kind, lv = LV(), pr = prof() || {}, L = [], main = SEL()[0];
+  if (!m) return '';
+  L.push(m === main ? 'Il travaille ton muscle principal du jour (' + m + ').' : 'Il complète ton muscle principal (' + main + ') avec ' + m + ', un muscle qui travaille souvent avec lui.');
+  L.push(kd === 'C' ? 'Mouvement qui sollicite plusieurs muscles : c\'est celui qui demande le plus de force, il passe donc en premier, quand tu es frais.' : 'Exercice d\'isolation : il passe après les gros mouvements pour finir le muscle sans t\'épuiser avant.');
+  if (X && X.hist.length) L.push('Tu le fais déjà (' + X.hist.length + ' séance' + (X.hist.length > 1 ? 's' : '') + ', la dernière ' + C.rel(X.hist[X.hist.length - 1].t, now()) + ') : on suit ta progression sur ce mouvement plutôt que d\'en changer à chaque fois.');
+  else L.push(lv === 'debutant' ? 'Nouveau pour toi. Il est stable et guidé, donc tu apprends le geste sans risque ni technique compliquée.' : 'Nouveau pour toi. Il varie les angles de travail du muscle et complète ce que tu fais déjà.');
+  if (e && e.why) L.push(e.why);
+  if (pr.w && C.bmiInfo(pr).k === 'fort' && lv === 'debutant') L.push('Les exercices pénibles pour les articulations sont gardés pour plus tard, vu ton rapport poids / taille.');
+  var have = {}; (names || []).forEach(function (n) { have[n] = 1; });
+  var ranked = LIB.filter(function (x) { return x.m === m && !have[x.n]; }).map(function (x) { return { x: x, r: C.rank(x.n, x.k, lv) + (x.p === (e && e.p) ? -200 : 0) + (model.ex[x.n] ? 15 : 0) }; }).sort(function (a, b) { return b.r - a.r; }).slice(0, 3);
+  var cr = C.rank(name, kd, lv);
+  var why2 = ranked.map(function (o) {
+    var x = o.x, t = lv === 'debutant' && C.noviceBlocked(x.n, x.k, pr) ? 'demande une technique ou une charge que tu n\'as pas encore, il viendra avec ton niveau.' : e && x.p === e.p ? 'même mouvement que celui-ci, il ferait doublon dans la séance.' : C.rank(x.n, x.k, lv) < cr ? 'moins exigeant, donc il passe après celui-ci.' : 'tout aussi bon, mais la séance est limitée à 6 exercices : tu peux l\'essayer avec « Remplacer » pendant l\'entraînement.';
+    return '<li><b>' + esc(x.n) + '</b> : ' + t + '</li>';
+  }).join('');
+  return '<div class="msg tip"><div class="lab">Pourquoi cet exercice ?</div><ul>' + L.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' + (why2 ? '<div class="lab">Et pourquoi pas…</div><ul>' + why2 + '</ul>' : '') + '</div>';
+}
 function altsFor(i) {
   var a = S.active, cur = a.exos[i], ce = LIBMAP[cur.name], X = model.ex[cur.name], m = ce ? ce.m : (X && X.muscle), kd = ce ? ce.k : (X && X.kind), lv = LV(), pr = prof() || {};
   if (!m) return [];
@@ -2535,7 +2554,8 @@ function viewWorkout() {
     (S.wmsg ? '<div class="msg err">' + esc(S.wmsg) + '</div>' : '') +
     '<div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
   a.exos.forEach(function (e, i) {
-    h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
+    h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
+      (S.wy === e.name ? whyHTML(e.name, a.exos.map(function (x) { return x.name; })) : '') +
       (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
       (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
@@ -2673,6 +2693,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'start') startWorkout();
   else if (a === 'wset') { var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok) S.active.lastOk = Date.now(); S.wmsg = null; saveActive(); }
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
+  else if (a === 'why') S.wy = S.wy === k ? null : k;
   else if (a === 'wrep') { S.rep = S.rep === wi ? null : wi; S.confirm = null; }
   else if (a === 'wrepdo') { var oe = S.active.exos[wi], ne = newExo(k, Math.max(2, oe.sets.length)); ne.rest = oe.rest; ne.rir = oe.rir; S.active.exos[wi] = ne; S.rep = null; S.wf = null; saveActive(); }
   else if (a === 'wrm') { if (S.confirm === 'rm' + wi) { S.active.exos.splice(wi, 1); S.rep = null; S.confirm = null; saveActive(); } else S.confirm = 'rm' + wi; }
