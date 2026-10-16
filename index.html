@@ -614,11 +614,18 @@ function planExo(X, now) {
 }
 
 /* muscles : tableau de noms. Retourne { items, warnings, rested } */
+/* Force demandée : les gros mouvements lourds d'abord (soulevé de terre, squat, développé couché barre...), l'isolation à la fin. */
+var MAX_EX = 6;
+function rank(name, kind) {
+  var r = kind === 'C' ? 100 : 0;
+  if (/^(Soulevé de terre|Squat \(barre\)|Développé (couché|incliné|militaire) \(barre\)|Rowing barre|Hip thrust|Good morning)/i.test(name)) r += 40;
+  else if (/^(Dips|Tractions|Hack squat|Presse|Rowing T-bar|Split squat|Fentes)/i.test(name)) r += 30;
+  if (/\(barre\)|barre EZ/i.test(name)) r += 20; else if (/haltère/i.test(name)) r += 10; else if (/\(machine\)|poulie/i.test(name)) r += 2;
+  return r;
+}
+function slotKind(i) { return ['C', 'I', 'C', 'I', 'I', 'I'][i] || 'I'; }
 function recommend(model, muscles, now) {
-  var nC = muscles.length === 1 ? 2 : 1;
-  var nI = muscles.length === 1 ? 3 : muscles.length === 2 ? 2 : 1;
-  var comp = [], iso = [], warnings = [];
-  muscles.forEach(function (m) {
+  var warnings = [], per = muscles.map(function (m) {
     var cands = Object.keys(model.ex).map(function (k) { return model.ex[k]; }).filter(function (X) { return X.muscle === m; });
     var scored = cands.map(function (X) {
       var h = X.hist, f90 = h.filter(function (x) { return now - x.t < 90 * DAY; }).length;
@@ -627,16 +634,24 @@ function recommend(model, muscles, now) {
     }).filter(function (o) { return o.f90 > 0; });
     if (!scored.length) scored = cands.map(function (X) { return { X: X, score: X.hist.length * 0.1, f90: 0 }; });
     scored.sort(function (a, b) { return b.score - a.score; });
-    var c = scored.filter(function (o) { return o.X.kind === 'C'; }).slice(0, nC);
-    var iCount = nI + (nC - c.length);
-    var i = scored.filter(function (o) { return o.X.kind === 'I'; }).slice(0, iCount);
-    comp = comp.concat(c); iso = iso.concat(i);
     var stt = muscleStatus(model, m, now);
     if (stt.state === 'fatigue' || stt.state === 'recup') {
       warnings.push({ muscle: m, hours: stt.hours, text: m + ' travaillé ' + stt.label + ' (' + Math.round(stt.hours) + ' h de récupération). ' + (stt.state === 'fatigue' ? 'Il vaut mieux attendre ou viser un autre muscle.' : 'Possible, mais reste léger sur les charges.') });
     }
+    return { C: scored.filter(function (o) { return o.X.kind === 'C'; }), I: scored.filter(function (o) { return o.X.kind !== 'C'; }), n: 0 };
   });
-  var items = comp.concat(iso).map(function (o) { return planExo(o.X, now); });
+  /* 6 exercices au maximum, répartis entre les muscles choisis : un tour de table, puis un autre. */
+  var picked = [], guard = 0;
+  while (picked.length < MAX_EX && guard++ < 40) {
+    var got = false;
+    for (var pi = 0; pi < per.length && picked.length < MAX_EX; pi++) {
+      var P = per[pi], kd = slotKind(P.n), alt = kd === 'C' ? 'I' : 'C', o = P[kd].shift() || P[alt].shift();
+      if (o) { picked.push(o); P.n++; got = true; }
+    }
+    if (!got) break;
+  }
+  picked.sort(function (a, b) { return rank(b.X.name, b.X.kind) - rank(a.X.name, a.X.kind); });
+  var items = picked.map(function (o) { return planExo(o.X, now); });
   var first = items.filter(function (x) { return x.kind === 'C' && !x.bw && x.w >= 20; })[0];
   if (first) {
     var inc = first.inc || 2.5;
@@ -739,7 +754,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, rank: rank, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -1570,10 +1585,13 @@ function autoXtra() {
   var key = S.sel.join('|');
   if (S.xk === key) return;
   S.xk = key; S.xtra = [];
-  S.sel.forEach(function (m) { if (!hasHist(m)) newFor(m).forEach(function (e) { S.xtra.push(e.n); }); });
+  /* Première fois sur un muscle : 6 exercices au maximum au total, les plus lourds d'abord. */
+  var room = C.MAX_EX - C.recommend(model, S.sel, now()).items.length, lists = S.sel.filter(function (m) { return !hasHist(m); }).map(function (m) { return newFor(m).slice(); }), pick = [], g = 0;
+  while (pick.length < room && g++ < 20) { var any = false; lists.forEach(function (l) { if (pick.length < room && l.length) { pick.push(l.shift()); any = true; } }); if (!any) break; }
+  pick.sort(function (a, b) { return C.rank(b.n, b.k) - C.rank(a.n, a.k); }).forEach(function (e) { S.xtra.push(e.n); });
 }
 function newFor(m) {
-  return LIB.filter(function (e) { return e.m === m && !model.ex[e.n]; }).sort(function (a, b) { return a.k === b.k ? 0 : a.k === 'C' ? -1 : 1; }).slice(0, 3);
+  return LIB.filter(function (e) { return e.m === m && !model.ex[e.n]; }).sort(function (a, b) { return C.rank(b.n, b.k) - C.rank(a.n, a.k); }).slice(0, 6);
 }
 function companionsSection(byM) {
   if (!S.sel.length || S.sel.length >= 3) return '';
@@ -1620,7 +1638,7 @@ function viewSeance() {
     h += '<div class="banner' + (crit ? ' crit' : '') + '">' + rec.warnings.map(function (w) { return '<span>' + esc(w.text) + '</span>'; }).join('') +
       (rec.rested.length ? '<span class="chips">' + rec.rested.slice(0, 3).map(function (s) { return '<button class="chip go" data-act="swap" data-m="' + s.muscle + '">' + s.muscle + ' · ' + esc(s.label) + '</button>'; }).join('') + '</span>' : '') + '</div>';
   }
-  if (rec.items.length) h += '<section class="sec"><div><h2>Ta séance</h2><p class="sub">' + rec.items.length + ' exercice' + (rec.items.length > 1 ? 's' : '') + ' choisi' + (rec.items.length > 1 ? 's' : '') + ' dans ton historique, tes habituels d\'abord.</p></div>';
+  if (rec.items.length) h += '<section class="sec"><div><h2>Ta séance</h2><p class="sub">' + rec.items.length + ' exercice' + (rec.items.length > 1 ? 's' : '') + ' choisi' + (rec.items.length > 1 ? 's' : '') + ' dans ton historique (6 au maximum), les plus lourds d\'abord.</p></div>';
   h += rec.items.map(function (it, i) {
     var key = it.name, dn = !!S.done[key];
     var tgt = it.bw ? '<b>' + it.sets + ' × ' + it.reps + '</b><small>reps' + (it.w > 0 ? ' · +' + kg(it.w) + ' kg' : '') + '</small>' : '<b>' + it.sets + ' × ' + it.reps + '</b><span>' + kg(it.w) + ' kg</span>';
@@ -1699,7 +1717,7 @@ function ficheToggle(name) {
 }
 function varietySection() {
   var firsts = [];
-  S.sel.forEach(function (m) { if (!hasHist(m)) newFor(m).forEach(function (e) { firsts.push(e); }); });
+  S.xtra.forEach(function (nm) { var e = LIBMAP[nm]; if (e && !hasHist(e.m) ) firsts.push(e); });
   var pool = LIB.filter(function (e) { return e.x && S.sel.indexOf(e.m) >= 0 && !model.ex[e.n] && firsts.indexOf(e) < 0; }).sort(function (a, b) { return a.n < b.n ? -1 : 1; });
   var off = Math.floor(now() / 864e5), pick = firsts.slice(), i;
   if (!firsts.length) for (i = 0; i < Math.min(2, pool.length); i++) pick.push(pool[(off + i) % pool.length]);
@@ -1816,6 +1834,7 @@ function startWorkout() {
     var e = LIBMAP[nm]; if (!e || S.active.exos.some(function (x) { return x.name === nm; })) return;
     S.active.exos.push({ name: nm, bw: e.bw, last: '', sets: [0, 1, 2].map(function () { return { w: 0, r: e.bw ? 8 : 10, ok: false }; }) });
   });
+  S.active.exos.sort(function (a, b) { var ea = LIBMAP[a.name], eb = LIBMAP[b.name], ka = (model.ex[a.name] || ea || {}).kind || (ea && ea.k), kb = (model.ex[b.name] || eb || {}).kind || (eb && eb.k); return C.rank(b.name, kb) - C.rank(a.name, ka); });
   S.xtra = []; S.xk = null; S.wf = null; S.wmsg = null; S.summary = null; saveActive(); wake();
 }
 function viewWorkout() {
