@@ -623,6 +623,20 @@ function noviceBlocked(name, kind, p) {
   if (p && bmi(p) >= 30 && /^(Fentes|Step-up|Split squat|Fente latérale)/i.test(name)) return true;
   return false;
 }
+
+/* charge de départ estimée d'après le poids de corps (coefficients pour un niveau intermédiaire) */
+var LOADK = { press: .75, press_incline: .6, press_decline: .6, press_machine: .6, fly: .1, fly_machine: .4, cable_up: .15, cable_down: .15, pulldown: .6, row_seated: .5, row: .3, straight_arm: .25, ohp: .2, lateral: .06, front_raise: .08, rear_fly: .3, bent_fly: .06, face_pull: .2, upright_row: .3, shrug: .8, curl: .14, curl_preacher: .12, curl_conc: .1, curl_incline: .1, skull: .25, pushdown: .35, overhead_ext: .2, kickback_tri: .06, squat: .9, goblet: .3, leg_press: 1.6, hack: .9, leg_ext: .5, leg_curl_lying: .4, leg_curl_seated: .4, lunge: .2, split_squat: .2, step_up: .2, deadlift: 1, hinge: .6, hip_thrust: .9, glute_kick: .25, abduction: .5, adduction: .5, calf_stand: .8, wrist_curl: .15, farmer: .3 };
+var LOADIM = { db: .12, cable: .25, mach: .4, bar: .5 };
+function startLoad(e, p, lv) {
+  if (!e || e.bw || !p || !p.w) return 0;
+  var k = LOADK[e.p]; if (k === undefined) k = LOADIM[e.im] || .3;
+  if (e.im === 'db' && e.p === 'press') k = .28; if (e.im === 'db' && e.p === 'press_incline') k = .24; if (e.im === 'db' && e.p === 'ohp') k = .2; if (e.im === 'bar' && e.p === 'curl') k = .3; if (e.im === 'cable' && e.p === 'curl') k = .3;
+  if (e.im === 'db' && e.p === 'hinge') k = .25; if (e.im === 'mach' && e.p === 'ohp') k = .45; if (e.im === 'bar' && e.p === 'row') k = .6; if (e.im === 'db' && e.p === 'shrug') k = .35; if (e.im === 'db' && e.p === 'overhead_ext') k = .12;
+  var m = lv === 'debutant' ? .55 : lv === 'avance' ? 1.25 : 1; if (p.sex === 'F') m *= .65; if (p.age >= 50) m *= .85;
+  var v = p.w * k * m, st = e.im === 'db' ? (v < 12 ? 1 : 2) : e.im === 'bar' ? 2.5 : 2.5;
+  if (e.im === 'bar' && /curl/.test(e.p) === false && e.p !== 'wrist_curl') v = Math.max(v, 20);
+  return Math.max(st, Math.round(v / st) * st);
+}
 /* séries et reps de départ pour un exercice jamais fait, selon le niveau et les tests */
 function starter(name, kind, bw, p, lv) {
   var t = (p && p.t) || {}, comp = kind === 'C';
@@ -1015,7 +1029,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, weekPlan: weekPlan, weekMenu: weekMenu, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, startLoad: startLoad, weekPlan: weekPlan, weekMenu: weekMenu, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -2491,11 +2505,27 @@ function startWorkout() {
   }) };
   S.xtra.forEach(function (nm) {
     var e = LIBMAP[nm]; if (!e || S.active.exos.some(function (x) { return x.name === nm; })) return;
-    var st = C.starter(nm, e.k, e.bw, prof() || {}, LV());
-    S.active.exos.push({ name: nm, bw: e.bw, last: LV() === 'debutant' && !e.bw ? 'Première fois : choisis une charge légère, avec 3 reps en réserve.' : '', sets: []. concat(Array(st.sets).fill(0)).map(function () { return { w: 0, r: st.reps, ok: false }; }) });
+    S.active.exos.push(newExo(nm, 0));
   });
   S.active.exos.sort(function (a, b) { var ea = LIBMAP[a.name], eb = LIBMAP[b.name], ka = (model.ex[a.name] || ea || {}).kind || (ea && ea.k), kb = (model.ex[b.name] || eb || {}).kind || (eb && eb.k); var ma = (model.ex[a.name] || ea || {}).muscle || (ea && ea.m), mb = (model.ex[b.name] || eb || {}).muscle || (eb && eb.m); var pa = ma === S.sel[0] ? 1000 : 0, pb = mb === S.sel[0] ? 1000 : 0; return (pb + C.rank(b.name, kb)) - (pa + C.rank(a.name, ka)); });
   S.xtra = []; S.xk = null; S.wf = null; S.wmsg = null; S.summary = null; saveActive(); wake();
+}
+function newExo(nm, nsets) {
+  var e = LIBMAP[nm], X = model.ex[nm], pr = prof(), lv = LV(), st = C.starter(nm, e ? e.k : (X && X.kind), e ? e.bw : (X && X.bw), pr || {}, lv), w = 0, r = st.reps, last = '', hint = '';
+  var ns = nsets || st.sets;
+  if (X && X.hist.length) { var b = X.hist[X.hist.length - 1].best; if (b) { w = b.w > 0 ? b.w : 0; r = b.r || r; } last = (w ? kg(w) + ' kg × ' : '') + r; }
+  else if (e && !e.bw && pr) { w = C.startLoad(e, pr, lv); hint = 'Charge de départ estimée d\'après ton poids (' + String(pr.w).replace('.', ',') + ' kg)' + (lv === 'debutant' ? ', avec 3 reps en réserve' : '') + ' : ajuste-la selon ton ressenti.'; }
+  else if (e && !e.bw) hint = 'Première fois : choisis une charge légère, avec 3 reps en réserve.';
+  var sets = []; for (var i = 0; i < ns; i++) sets.push({ w: w, r: r, ok: false });
+  return { name: nm, bw: e ? e.bw : !!(X && X.bw), last: last, hint: hint, sets: sets };
+}
+function altsFor(i) {
+  var a = S.active, cur = a.exos[i], ce = LIBMAP[cur.name], X = model.ex[cur.name], m = ce ? ce.m : (X && X.muscle), kd = ce ? ce.k : (X && X.kind), lv = LV(), pr = prof() || {};
+  if (!m) return [];
+  var have = {}; a.exos.forEach(function (x) { have[x.name] = 1; });
+  return LIB.filter(function (e) { return e.m === m && !have[e.n] && !(lv === 'debutant' && C.noviceBlocked(e.n, e.k, pr)); }).map(function (e) {
+    return { e: e, sc: (ce && e.p === ce.p ? 60 : 0) + (e.k === kd ? 30 : 0) + (model.ex[e.n] ? 10 : 0) + C.rank(e.n, e.k, lv) / 10 };
+  }).sort(function (x, y) { return y.sc - x.sc; }).slice(0, 6).map(function (o) { return o.e.n; });
 }
 function viewWorkout() {
   var a = S.active, total = 0, okn = 0;
@@ -2505,9 +2535,10 @@ function viewWorkout() {
     (S.wmsg ? '<div class="msg err">' + esc(S.wmsg) + '</div>' : '') +
     '<div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
   a.exos.forEach(function (e, i) {
-    h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button></div></div>' +
+    h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
+      (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
-      (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') +
+      (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
       '<div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' +
       e.sets.map(function (s, j) {
         return '<div class="sg"><span class="mono">' + (j + 1) + '</span>' +
@@ -2581,7 +2612,7 @@ function copyCSV() {
 document.addEventListener('click', function (e) {
   var b = e.target.closest('[data-act]'); if (!b) return;
   var a = b.getAttribute('data-act'), m = b.getAttribute('data-m'), k = b.getAttribute('data-k'), wi = +b.getAttribute('data-i'), wj = +b.getAttribute('data-j');
-  if (a !== 'reset' && a !== 'wabort') S.confirm = null;
+  if (a !== 'reset' && a !== 'wabort' && a !== 'wrm') S.confirm = null;
   if (a === 'tab') return go(b.getAttribute('data-t'));
   if (['pick', 'swap', 'preset', 'plansel', 'addm', 'aiplan'].indexOf(a) >= 0) S.solo = false;
   if (a === 'pick' && m === injured() && S.sel.indexOf(m) < 0) { S.evwarn = 'Tu as signalé une douleur sur ' + m + ' : on le ménage. Choisis un autre muscle, ou touche « Revenir au programme normal » si c\'est réglé.'; }
@@ -2642,6 +2673,9 @@ document.addEventListener('click', function (e) {
   else if (a === 'start') startWorkout();
   else if (a === 'wset') { var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok) S.active.lastOk = Date.now(); S.wmsg = null; saveActive(); }
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
+  else if (a === 'wrep') { S.rep = S.rep === wi ? null : wi; S.confirm = null; }
+  else if (a === 'wrepdo') { var oe = S.active.exos[wi], ne = newExo(k, Math.max(2, oe.sets.length)); ne.rest = oe.rest; ne.rir = oe.rir; S.active.exos[wi] = ne; S.rep = null; S.wf = null; saveActive(); }
+  else if (a === 'wrm') { if (S.confirm === 'rm' + wi) { S.active.exos.splice(wi, 1); S.rep = null; S.confirm = null; saveActive(); } else S.confirm = 'rm' + wi; }
   else if (a === 'wdel') { var ex1 = S.active.exos[wi]; ex1.sets.splice(wj, 1); if (!ex1.sets.length) S.active.exos.splice(wi, 1); saveActive(); }
   else if (a === 'wabort') { if (S.confirm === 'abort') { S.active = null; saveActive(); unwake(); S.confirm = null; } else S.confirm = 'abort'; }
   else if (a === 'wfin') finishWorkout();
