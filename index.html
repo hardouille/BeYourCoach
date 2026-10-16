@@ -97,6 +97,8 @@ nav.tabs:empty { display: none; }
 .tile[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .tile .n { font: 800 min(16.5px, 3.8vw)/1.1 var(--f-display); letter-spacing: .02em; text-transform: uppercase; overflow-wrap: normal; word-break: keep-all; }
 .tile .s { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.meth { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
+.meth b { color: var(--ink); font-weight: 600; }
 .tile .k { font: 10.5px var(--f-mono); color: var(--muted); white-space: nowrap; }
 .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--muted); }
 .dot.ready { background: var(--good); } .dot.recup { background: var(--warn); } .dot.fatigue { background: var(--crit); }
@@ -613,6 +615,33 @@ function planExo(X, now) {
   return it;
 }
 
+
+/* ---------- méthode : volume, intensité, repos, techniques (principes actuels de l'entraînement en résistance) ----------
+   Volume hebdomadaire par muscle : 10 à 20 séries pour progresser (prise de muscle), 8 à 16 en déficit (on garde le volume),
+   6 à 12 pour entretenir. Séries proches de l'échec (0 à 3 reps en réserve), les gros mouvements un peu plus loin de l'échec.
+   Repos longs sur les exercices lourds, courts sur l'isolation. Semaine allégée tous les 5 à 8 semaines ou si tout stagne. */
+var VOL = { muscle: [10, 20], perte: [8, 16], maintien: [6, 12] };
+var STRETCH = /incliné|pupitre|araignée|au-dessus de la tête|derrière|Écarté|roumain|Leg curl allongé/i;
+function needsDeload(model, now) {
+  var ws = weekly(model, now, 10).slice(0, -1), tot = ws.reduce(function (t, w) { return t + w.sets; }, 0), avg = tot / ws.length || 0;
+  var run = 0, i; for (i = ws.length - 1; i >= 0; i--) { if (ws[i].sessions >= 1 && ws[i].sets >= 0.7 * avg) run++; else break; }
+  var pl = progress(model, now).plateaus.length;
+  if (run >= 6) return { suggest: true, why: run + ' semaines d\'entraînement d\'affilée sans semaine allégée.' };
+  if (pl >= 4 && run >= 3) return { suggest: true, why: pl + ' exercices stagnent depuis plusieurs semaines : une semaine allégée aide souvent à repartir.' };
+  return { suggest: false };
+}
+function fmtRest(x) { return x < 90 ? x + ' s' : Math.floor(x / 60) + ' min' + (x % 60 ? ' ' + (x % 60) : ''); }
+function method(it, goal, ctx) {
+  var heavy = it.kind === 'C' && rank(it.name, it.kind) >= 140, comp = it.kind === 'C', g = goal || 'maintien';
+  var rest = heavy ? (g === 'perte' ? [90, 120] : [150, 240]) : comp ? (g === 'perte' ? [60, 90] : g === 'muscle' ? [90, 150] : [90, 120]) : (g === 'perte' ? [45, 60] : [60, 90]);
+  var rir = ctx.deload ? '4 : aucune série difficile' : heavy ? '2 (stoppe 2 reps avant l\'échec)' : comp ? '1 à 2' : '0 à 1 (la dernière série peut aller à l\'échec)';
+  var tech = ['Descente contrôlée sur 2 à 3 s, puis remonte avec intention.'];
+  if (!it.bw && heavy && !ctx.deload && g !== 'perte') tech.push('Série lourde en premier, puis les suivantes avec ~8 % de moins pour garder des reps de qualité.');
+  if (!comp && STRETCH.test(it.name)) tech.push('Descends bien dans l\'étirement du muscle : le travail en allongement est très efficace.');
+  if (ctx.finisher && g === 'muscle' && !ctx.deload) tech.push('Finition : après la dernière série, enchaîne une série dégressive (−20 % de charge, jusqu\'à l\'échec).');
+  it.rest = rest; it.restTxt = rest[1] < 90 ? rest[0] + ' à ' + rest[1] + ' s' : fmtRest(rest[0]) + ' à ' + fmtRest(rest[1]); it.rir = rir; it.tech = tech;
+}
+
 /* muscles : tableau de noms. Retourne { items, warnings, rested } */
 /* Force demandée : les gros mouvements lourds d'abord (soulevé de terre, squat, développé couché barre...), l'isolation à la fin. */
 var MAX_EX = 6;
@@ -625,7 +654,8 @@ function rank(name, kind) {
 }
 function quota(n, i) { return n <= 1 ? 6 : n === 2 ? [4, 2][i] : [3, 2, 1][i] || 0; }
 function slotKind(i) { return ['C', 'I', 'C', 'I', 'I', 'I'][i] || 'I'; }
-function recommend(model, muscles, now) {
+function recommend(model, muscles, now, opts) {
+  opts = opts || {};
   var warnings = [], per = muscles.map(function (m) {
     var cands = Object.keys(model.ex).map(function (k) { return model.ex[k]; }).filter(function (X) { return X.muscle === m; });
     var scored = cands.map(function (X) {
@@ -649,7 +679,21 @@ function recommend(model, muscles, now) {
   while (left > 0 && gd++ < 20) { var got = false; for (var j = 0; j < per.length && left > 0; j++) if (take(j)) { left--; got = true; } if (!got) break; }
   picked = picked.map(function (l) { return l.sort(function (a, b) { return rank(b.X.name, b.X.kind) - rank(a.X.name, a.X.kind); }); });
   picked = picked.reduce(function (t, l) { return t.concat(l); }, []);
-  var items = picked.map(function (o) { return planExo(o.X, now); });
+  var items = picked.map(function (o) { return planExo(o.X, now); }), vol = VOL[opts.goal] || VOL.maintien, lastIso = {};
+  items.forEach(function (it, i) { if (it.kind !== 'C') lastIso[it.muscle] = i; });
+  items.forEach(function (it, i) {
+    var stt = muscleStatus(model, it.muscle, now), isMain = it.muscle === muscles[0];
+    if (opts.deload) {
+      it.sets = Math.max(2, Math.ceil(it.sets * 0.6));
+      if (!it.bw && it.inc) it.w = r1(Math.round(it.w * 0.9 / it.inc) * it.inc);
+      it.why = 'Semaine allégée : moins de séries, charge −10 %. ' + it.why;
+    } else if (stt.avg4 && stt.avg4 < vol[0] && it.sets < 5 && isMain) {
+      it.sets += 1; it.vnote = 'Ton volume sur ' + it.muscle + ' (' + Math.round(stt.avg4) + ' séries / semaine) est sous les ' + vol[0] + ' conseillées : une série de plus.';
+    } else if (stt.avg4 > vol[1] && it.sets > 2) {
+      it.sets -= 1; it.vnote = 'Tu fais déjà ' + Math.round(stt.avg4) + ' séries / semaine sur ' + it.muscle + ' (au-delà de ' + vol[1] + ') : une série de moins pour bien récupérer.';
+    }
+    method(it, opts.goal, { deload: opts.deload, finisher: isMain && lastIso[it.muscle] === i && model.sessions.length >= 30 });
+  });
   var first = items.filter(function (x) { return x.kind === 'C' && !x.bw && x.w >= 20; })[0];
   if (first) {
     var inc = first.inc || 2.5;
@@ -752,7 +796,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -1584,7 +1628,7 @@ function autoXtra() {
   if (S.xk === key) return;
   S.xk = key; S.xtra = [];
   /* Première fois sur un muscle : 6 exercices au maximum au total, le muscle principal en premier, les plus lourds d'abord. */
-  var cnt = {}; C.recommend(model, S.sel, now()).items.forEach(function (it) { cnt[it.muscle] = (cnt[it.muscle] || 0) + 1; });
+  var cnt = {}; C.recommend(model, S.sel, now(), ropts()).items.forEach(function (it) { cnt[it.muscle] = (cnt[it.muscle] || 0) + 1; });
   S.sel.forEach(function (m, i) {
     if (hasHist(m)) return;
     newFor(m).slice(0, Math.max(0, C.quota(S.sel.length, i) - (cnt[m] || 0))).forEach(function (e) { S.xtra.push(e.n); });
@@ -1614,6 +1658,17 @@ function companionsSection(byM) {
     return '<button class="comp" data-act="addm" data-m="' + esc(c.m) + '"><span class="cn"><i class="dot ' + c.state + '"></i>' + esc(c.m) + '</span><span class="cw">' + esc(c.why) + ' · ' + esc(c.label) + '</span></button>';
   }).join('') + '</div></section>';
 }
+function deloadOn() { try { var t = parseInt(localStorage.getItem('cds.deload') || '0', 10); return t && Date.now() - t < 7 * 864e5; } catch (e) { return false; } }
+function ropts() { return { goal: PROFILE && !PROFILE.skip ? PROFILE.goal : null, deload: deloadOn() }; }
+function deloadCard() {
+  if (deloadOn()) return '<div class="msg tip"><div class="lab">Semaine allégée en cours</div><p class="why">Moins de séries, charges −10 %, rien de difficile. Tu reviens à ton rythme normal ensuite.</p><button class="btn" data-act="deload" data-v="0">Revenir au programme normal</button></div>';
+  var d = C.needsDeload(model, now()); if (!d.suggest || !hasData()) return '';
+  return '<div class="banner"><span><b>Semaine allégée conseillée.</b> ' + esc(d.why) + ' Elle réduit les séries et les charges pendant 7 jours pour mieux récupérer, puis tu progresses plus vite.</span><span class="chips"><button class="chip go" data-act="deload" data-v="1">Lancer une semaine allégée</button></span></div>';
+}
+function methLine(it) {
+  return '<div class="meth"><span>Repos <b>' + esc(it.restTxt) + '</b></span><span>Reps en réserve <b>' + esc(it.rir) + '</b></span></div>' +
+    '<ul class="how">' + it.tech.map(function (t) { return '<li>' + esc(t) + '</li>'; }).join('') + '</ul>' + (it.vnote ? '<p class="legend">' + esc(it.vnote) + '</p>' : '');
+}
 function focusCard() {
   if (!S.sel.length) return '';
   var q = S.sel.length;
@@ -1639,8 +1694,8 @@ function viewSeance() {
   h += companionsSection(byM);
   autoXtra();
   if (!S.sel.length) return h + '<p class="empty">Choisis un muscle pour obtenir ta séance.</p>';
-  h += focusCard();
-  var rec = C.recommend(model, S.sel, n);
+  h += deloadCard() + focusCard();
+  var rec = C.recommend(model, S.sel, n, ropts());
   if (rec.warnings.length) {
     var crit = rec.warnings.some(function (w) { return w.hours < 24; });
     h += '<div class="banner' + (crit ? ' crit' : '') + '">' + rec.warnings.map(function (w) { return '<span>' + esc(w.text) + '</span>'; }).join('') +
@@ -1653,6 +1708,7 @@ function viewSeance() {
     return '<article class="card' + (dn ? ' done' : '') + '"><div class="row"><div><div class="ename">' + esc(it.name) + '</div><div class="emu">' + it.muscle + ' · ' + (it.kind === 'C' ? 'polyarticulaire' : 'isolation') + ' · zone ' + it.zone + ' reps</div></div>' +
       '<button class="btn" data-act="done" data-k="' + esc(key) + '" aria-pressed="' + dn + '">' + (dn ? 'Fait' : 'À faire') + '</button></div>' +
       '<div class="target">' + tgt + '</div><p class="why">' + esc(it.why) + '</p>' +
+      methLine(it) +
       (it.warm ? '<div class="warm">Échauffement : <b>' + it.warm + '</b></div>' : '') +
       '<div class="hist">' + C.fmtDate(it.lastDate) + ' : ' + esc(it.lastLine) + '</div>' +
       (it.plateau ? '<div><span class="pill flat">Stagne depuis 6 semaines</span></div>' : '') +
@@ -1832,11 +1888,11 @@ setInterval(function () {
 if (S.active) wake();
 
 function startWorkout() {
-  var rec = C.recommend(model, S.sel, now());
+  var rec = C.recommend(model, S.sel, now(), ropts());
   if (!rec.items.length && !S.xtra.length) return;
   S.active = { t0: Date.now(), start: now(), title: S.sel.join(' + '), lastOk: null, exos: rec.items.map(function (it) {
     var sets = [], i; for (i = 0; i < it.sets; i++) sets.push({ w: it.w > 0 ? it.w : 0, r: it.reps, ok: false });
-    return { name: it.name, bw: it.bw, last: it.lastLine, sets: sets };
+    return { name: it.name, bw: it.bw, last: it.lastLine, sets: sets, rest: it.restTxt, rir: it.rir };
   }) };
   S.xtra.forEach(function (nm) {
     var e = LIBMAP[nm]; if (!e || S.active.exos.some(function (x) { return x.name === nm; })) return;
@@ -1853,7 +1909,7 @@ function viewWorkout() {
     (S.wmsg ? '<div class="msg err">' + esc(S.wmsg) + '</div>' : '') +
     '<div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
   a.exos.forEach(function (e, i) {
-    h += '<article class="card"><div class="row"><div class="ename">' + esc(e.name) + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button></div></div>' +
+    h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button></div></div>' +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
       (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') +
       '<div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' +
@@ -1932,6 +1988,7 @@ document.addEventListener('click', function (e) {
   if (a !== 'reset' && a !== 'wabort') S.confirm = null;
   if (a === 'tab') return go(b.getAttribute('data-t'));
   if (a === 'pick') { var i = S.sel.indexOf(m); if (i >= 0) S.sel.splice(i, 1); else { S.sel.push(m); if (S.sel.length > 3) S.sel.splice(1, 1); } S.done = {}; S.xtra = []; S.xk = null; }
+  else if (a === 'deload') { try { if (b.dataset.v === '1') localStorage.setItem('cds.deload', String(Date.now())); else localStorage.removeItem('cds.deload'); } catch (e) {} S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'focus') { var fi = S.sel.indexOf(m); if (fi > 0) { S.sel.splice(fi, 1); S.sel.unshift(m); } S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'swap') { S.sel = [m]; S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'preset') { S.sel = C.PRESETS[wi][1].slice(); S.done = {}; S.xtra = []; S.xk = null; }
