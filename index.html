@@ -213,6 +213,11 @@ select.search { appearance: auto; }
 .fig .eq { stroke: var(--muted); stroke-width: 3; stroke-linecap: round; } .fig .eq.bar { fill: var(--surface); }
 .fig .fl { stroke: var(--line); stroke-width: 1; } .fig .cb { stroke: var(--muted); stroke-width: 1; } .fig .dotc { fill: var(--muted); }
 ul.how { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.lg { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; margin: 0 0 8px; }
+.lg summary { cursor: pointer; font-weight: 600; }
+.lg .why { margin: 8px 0 0; }
+#legal { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: var(--surface); border-top: 1px solid var(--accent); font-size: 13.5px; }
+#legal p { margin: 0 0 8px; max-width: 60ch; }
 .msg.tip { background: var(--accent-soft); border-color: var(--accent); }
 .empty { color: var(--muted); font-size: 14px; padding: 8px 0; }
 @media (prefers-reduced-motion: no-preference) { .tile, .chip, .btn { transition: background-color .15s, border-color .15s; } }
@@ -3172,6 +3177,13 @@ function viewHome() {
     '<p class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes.<br>Tes données restent sur cet appareil, elles ne sont envoyées nulle part.</p>' +
     '<button class="btn" data-act="editprofile">' + (prof() ? 'Mon profil' : 'Créer mon profil') + '</button>' + '<details><summary>Comment exporter mon historique ?</summary><div class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier avec « Importer ».</li></ol><div class="lab">Autres applis</div><ol class="how"><li><b>Strong :</b> Réglages, « Export Strong Data » (iPhone) ou « Export Data » (Android).</li><li><b>Fitbod :</b> onglet Log, roue crantée, « Export Workout Data ». Poids en livres.</li><li><b>JEFIT :</b> depuis le site jefit.com : My Jefit, Settings, Data Controls, Export Data.</li><li><b>FitNotes :</b> Réglages, sauvegarde, export tableur.</li></ol></div></details></section>';
 }
+function legalCard() {
+  return '<section class="sec"><div class="lab">Informations importantes</div>' +
+    '<details class="lg"><summary>Avertissement santé</summary><p class="why">BeYourCoach donne des informations générales sur l\'entraînement et l\'alimentation. Ce n\'est pas un avis médical et cela ne remplace ni un médecin ni un coach diplômé. Demande l\'avis d\'un médecin avant de commencer ou de reprendre le sport, surtout en cas de problème de santé, de blessure, de grossesse ou de traitement. Arrête l\'exercice en cas de douleur, de vertige ou de gêne respiratoire. Les charges proposées sont des points de départ à adapter. Les conseils alimentaires sont indicatifs. Les moins de 18 ans doivent s\'entraîner avec l\'accord et l\'aide d\'un adulte.</p></details>' +
+    '<details class="lg"><summary>Confidentialité</summary><p class="why">Il n\'y a ni compte, ni publicité, ni suivi. Ton profil, tes séances, ton poids et tes réglages restent uniquement dans ce navigateur, sur cet appareil. Ils ne sont envoyés nulle part. Tu peux tout effacer avec « Effacer mes données » ou en vidant les données du site dans ton navigateur.</p><p class="why">Deux éléments contactent des services extérieurs : l\'hébergeur de l\'application (GitHub), qui voit ton adresse IP quand tu ouvres l\'app, et YouTube (Google). Les miniatures des vidéos se chargent depuis YouTube quand tu ouvres une fiche, et le lecteur YouTube se charge quand tu touches une vidéo. Google peut alors recevoir des informations techniques comme ton adresse IP. Sans connexion, les vidéos ne s\'affichent pas.</p></details>' +
+    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
+    '</section>';
+}
 function viewData() {
   var first = C.fmtDateY(model.first), last = C.fmtDateY(model.last);
   var exN = Object.keys(model.ex).length;
@@ -3179,10 +3191,18 @@ function viewData() {
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
     '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
     (seedCSV.trim() ? '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : effacer aussi mes nouvelles séances' : 'Revenir aux données d\'origine') + '</button></div>' : '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : tout effacer' : 'Effacer mes données') + '</button></div>') + '</div></section>' +
-    '<section class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier workout_data.csv ci-dessus.</li></ol></section>' + exportCard();
+    '<section class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier workout_data.csv ci-dessus.</li></ol></section>' + exportCard() + legalCard();
 }
 
+function legalBar() {
+  var el = document.getElementById('legal');
+  var done = lsGet('cds.legal') === '1';
+  if (done) { if (el) el.remove(); return; }
+  if (!el) { el = document.createElement('div'); el.id = 'legal'; el.setAttribute('role', 'region'); el.setAttribute('aria-label', 'Information importante'); document.body.appendChild(el); }
+  el.innerHTML = '<p><b>Avant de commencer.</b> Les conseils de BeYourCoach sont généraux et ne remplacent pas un avis médical. Consulte un médecin si tu as un doute, et arrête en cas de douleur. Tes données restent sur cet appareil. Détails dans Données, section Informations importantes.</p><button class="btn primary" data-act="legalok">J\'ai compris</button>';
+}
 function render() {
+  legalBar();
   saveNav();
   var lg = $('blogo'); if (lg && !lg.getAttribute('src')) lg.setAttribute('src', window.LOGO_URI);
   if (S.onb) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewOnboarding(); return; }
@@ -3399,6 +3419,7 @@ document.addEventListener('click', function (e) {
     else { lsDel('cds.csv'); lsDel('cds.log'); lsDel('cds.active'); S.active = null; baseRows = seedCSV.trim() ? C.parseCSV(seedCSV) : []; log = []; rebuild(); S.sel = null; S.confirm = null; S.msg = { t: seedCSV.trim() ? 'Données d\'origine restaurées.' : 'Données effacées.' }; }
   }
   else if (a === 'home') { S.onb = null; if (!S.active) S.home = true; else go('seance'); S.msg = null; }
+  else if (a === 'legalok') { lsSet('cds.legal', '1'); legalBar(); return; }
   else if (a === 'enter') { S.msg = null; if (!PROFILE && !S.skipped) { S.onb = { next: 'enter' }; S.pf = newPf(); S.pfErr = null; render(); return; } S.home = false; go(S.tab === 'data' ? 'seance' : S.tab); return; }
   else if (a === 'blank') { if (!PROFILE && !S.skipped) { S.onb = { next: 'blank' }; S.pf = newPf(); S.pfErr = null; render(); return; } startBlank(); return; }
   else if (a === 'editprofile') { S.onb = { edit: true, from: S.home ? 'home' : 'data' }; S.pf = PROFILE && !PROFILE.skip ? JSON.parse(JSON.stringify(PROFILE)) : newPf(); S.pfErr = null; }
