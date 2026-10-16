@@ -213,6 +213,11 @@ select.search { appearance: auto; }
 .fig .eq { stroke: var(--muted); stroke-width: 3; stroke-linecap: round; } .fig .eq.bar { fill: var(--surface); }
 .fig .fl { stroke: var(--line); stroke-width: 1; } .fig .cb { stroke: var(--muted); stroke-width: 1; } .fig .dotc { fill: var(--muted); }
 ul.how { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
+.rmlist { display: grid; gap: 8px; }
+.rmrow { display: grid; grid-template-columns: 1fr 76px auto 76px; gap: 8px; align-items: center; }
+.rmrow .rmn { font-size: 13.5px; min-width: 0; }
+.rmrow .rmx { color: var(--muted); }
+.rmrow .fin { min-width: 0; width: 100%; }
 .lg { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; margin: 0 0 8px; }
 .lg summary { cursor: pointer; font-weight: 600; }
 .lg .why { margin: 8px 0 0; }
@@ -638,7 +643,38 @@ function noviceBlocked(name, kind, p) {
 /* charge de départ estimée d'après le poids de corps (coefficients pour un niveau intermédiaire) */
 var LOADK = { press: .75, press_incline: .6, press_decline: .6, press_machine: .6, fly: .1, fly_machine: .4, cable_up: .15, cable_down: .15, pulldown: .6, row_seated: .5, row: .3, straight_arm: .25, ohp: .2, lateral: .06, front_raise: .08, rear_fly: .3, bent_fly: .06, face_pull: .2, upright_row: .3, shrug: .8, curl: .14, curl_preacher: .12, curl_conc: .1, curl_incline: .1, skull: .25, pushdown: .35, overhead_ext: .2, kickback_tri: .06, squat: .9, goblet: .3, leg_press: 1.6, hack: .9, leg_ext: .5, leg_curl_lying: .4, leg_curl_seated: .4, lunge: .2, split_squat: .2, step_up: .2, deadlift: 1, hinge: .6, hip_thrust: .9, glute_kick: .25, abduction: .5, adduction: .5, calf_stand: .8, wrist_curl: .15, farmer: .3 };
 var LOADIM = { db: .12, cable: .25, mach: .4, bar: .5 };
-function startLoad(e, p, lv) {
+/* charges de référence saisies à la création du profil : meilleure série récente (kg × reps) sur les mouvements principaux */
+var RM = [
+  ['bench', 'Développé couché (barre)', { p: 'press', im: 'bar' }, ['press', 'press_incline', 'press_decline', 'press_machine', 'fly', 'fly_machine', 'cable_up', 'cable_down', 'skull', 'pushdown', 'overhead_ext', 'kickback_tri']],
+  ['squat', 'Squat (barre)', { p: 'squat', im: 'bar' }, ['squat', 'hack', 'leg_press', 'goblet', 'lunge', 'split_squat', 'step_up', 'leg_ext', 'leg_curl_lying', 'leg_curl_seated', 'leg_curl_stand']],
+  ['dead', 'Soulevé de terre (barre)', { p: 'deadlift', im: 'bar' }, ['deadlift', 'hinge', 'good_morning', 'hip_thrust', 'back_ext', 'glute_kick']],
+  ['ohp', 'Développé militaire (barre)', { p: 'ohp', im: 'bar' }, ['ohp', 'lateral', 'front_raise', 'rear_fly', 'bent_fly', 'face_pull', 'upright_row']],
+  ['row', 'Rowing barre penché', { p: 'row', im: 'bar' }, ['row', 'row_seated', 'straight_arm', 'shrug', 'curl', 'curl_preacher', 'curl_conc', 'curl_incline']],
+  ['pull', 'Tirage poitrine (poulie)', { p: 'pulldown', im: 'cable' }, ['pulldown']]
+];
+function e1rm(w, r) { return w > 0 && r >= 1 && r <= 12 ? w * (1 + r / 30) : 0; }
+function rmClean(rm) {
+  var o = {};
+  RM.forEach(function (R) {
+    var v = rm && rm[R[0]]; if (!v) return;
+    var w = parseFloat(String(v.w).replace(',', '.')), r = parseInt(v.r, 10);
+    if (w > 0 && w <= 500 && r >= 1 && r <= 12) o[R[0]] = { w: Math.round(w * 2) / 2, r: r };
+  });
+  return o;
+}
+/* rapport entre la charge de travail réelle (environ 12 répétitions) et l'estimation d'après le poids de corps */
+function rmFactor(e, p, lv) {
+  if (!p || !p.rm) return 1;
+  for (var i = 0; i < RM.length; i++) {
+    var R = RM[i], v = p.rm[R[0]];
+    if (!v || R[3].indexOf(e.p) < 0) continue;
+    var base = startLoad(R[2], { w: p.w, sex: p.sex, age: p.age }, lv, true);
+    var work = e1rm(v.w, v.r) / 1.55; if (!(base > 0) || !(work > 0)) continue;
+    return Math.min(3, Math.max(.35, work / base));
+  }
+  return 1;
+}
+function startLoad(e, p, lv, raw) {
   if (!e || e.bw || !p || !p.w) return 0;
   var k = LOADK[e.p]; if (k === undefined) k = LOADIM[e.im] || .3;
   if (e.im === 'db' && e.p === 'press') k = .28; if (e.im === 'db' && e.p === 'press_incline') k = .24; if (e.im === 'db' && e.p === 'ohp') k = .2; if (e.im === 'bar' && e.p === 'curl') k = .3; if (e.im === 'cable' && e.p === 'curl') k = .3;
@@ -646,6 +682,7 @@ function startLoad(e, p, lv) {
   var m = lv === 'debutant' ? .55 : lv === 'avance' ? 1.25 : 1; if (p.sex === 'F') m *= .65; if (p.age >= 50) m *= .85;
   var v = p.w * k * m, st = e.im === 'db' ? (v < 12 ? 1 : 2) : e.im === 'bar' ? 2.5 : 2.5;
   if (e.im === 'bar' && /curl/.test(e.p) === false && e.p !== 'wrist_curl') v = Math.max(v, 20);
+  if (!raw) v *= rmFactor(e, p, lv);
   return Math.max(st, Math.round(v / st) * st);
 }
 /* séries et reps de départ pour un exercice jamais fait, selon le niveau et les tests */
@@ -1069,7 +1106,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, startLoad: startLoad, weekPlan: weekPlan, weekMenu: weekMenu, weightTrend: weightTrend, adjustFor: adjustFor, weightVerdict: weightVerdict, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, startLoad: startLoad, RM: RM, e1rm: e1rm, rmClean: rmClean, rmFactor: rmFactor, weekPlan: weekPlan, weekMenu: weekMenu, weightTrend: weightTrend, adjustFor: adjustFor, weightVerdict: weightVerdict, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -2038,6 +2075,7 @@ function viewOnboarding() {
     '<label>Poids<input class="fin" id="pf-w" type="text" inputmode="decimal" placeholder="kg" value="' + esc(d.w == null ? '' : d.w) + '"></label></div>' +
     '<div class="lab">Séances par semaine</div>' + chips('freq', C.FREQS.map(function (f) { return [f[0], f[1]]; })) + (d.avg ? '<p class="legend">Prérempli d\'après ton historique : environ ' + String(d.avg).replace('.', ',') + ' séance' + (d.avg >= 2 ? 's' : '') + ' par semaine.</p>' : '') +
     '<div class="lab">Ton niveau</div><p class="legend">Combien de répétitions fais-tu d\'affilée, sans forcer jusqu\'à l\'échec ? Laisse vide si tu ne sais pas : on part alors de ton rapport poids / taille, en douceur.</p><div class="fgrid">' + C.TESTS.map(function (T) { return '<label>' + T[1] + '<input class="fin" id="pf-t-' + T[0] + '" type="number" inputmode="numeric" min="0" max="300" placeholder="' + (T[0] === 'plank' ? 'sec' : 'reps') + '" value="' + esc((d.t && d.t[T[0]] != null) ? d.t[T[0]] : '') + '"></label>'; }).join('') + '</div>' +
+    (hasData() ? '' : '<div class="lab">Tes charges de référence (facultatif)</div><p class="legend">Pour chaque mouvement que tu connais : la charge de ta meilleure série récente et le nombre de répétitions faites (de 1 à 12), sans aller jusqu\'à l\'échec complet. Les charges de départ de tous les exercices du même type en seront déduites. Laisse vide ce que tu ne connais pas.</p><div class="rmlist">' + C.RM.map(function (R) { var v = (d.rm && d.rm[R[0]]) || {}; return '<div class="rmrow"><span class="rmn">' + esc(R[1]) + '</span><input class="fin" id="pf-rmw-' + R[0] + '" type="text" inputmode="decimal" placeholder="kg" aria-label="' + esc(R[1]) + ', charge en kg" value="' + esc(v.w == null ? '' : v.w) + '"><span class="rmx">×</span><input class="fin" id="pf-rmr-' + R[0] + '" type="number" inputmode="numeric" min="1" max="12" placeholder="reps" aria-label="' + esc(R[1]) + ', répétitions" value="' + esc(v.r == null ? '' : v.r) + '"></div>'; }).join('') + '</div>') +
     '<div class="lab">Choisir mon niveau</div><div class="chips"><button class="chip" data-act="pf" data-f="lvl" data-v="" aria-pressed="' + (!d.lvl) + '">Automatique</button>' + C.LEVELS.map(function (l) { return '<button class="chip" data-act="pf" data-f="lvl" data-v="' + l + '" aria-pressed="' + (d.lvl === l) + '">' + C.LEVEL_LABEL[l] + '</button>'; }).join('') + '</div>' +
     '<div class="lab">Ton objectif</div><div class="opts">' + C.GOALS.map(function (g) { return '<button class="opt" data-act="pf" data-f="goal" data-v="' + g[0] + '" aria-pressed="' + (d.goal === g[0]) + '"><b>' + g[1] + '</b><span>' + g[2] + '</span></button>'; }).join('') + '</div></div>' +
     '<button class="btn primary big" data-act="pfsave">' + (edit ? 'Enregistrer' : 'Enregistrer et continuer') + '</button>' +
@@ -2049,11 +2087,11 @@ function guessFreq() {
   return [avg < 3 ? '1-3' : avg < 5 ? '3-5' : '5-7', Math.round(avg * 10) / 10];
 }
 function newPf() { var o = {t: {}}; if (hasData()) { var g = guessFreq(); if (g[1] > 0) { o.freq = g[0]; o.avg = g[1]; } } return o; }
-function profCode(p) { try { return 'BYC1.' + btoa(unescape(encodeURIComponent(JSON.stringify({ a: p.age, s: p.sex, h: p.h, w: p.w, f: p.freq, g: p.goal, t: p.t, l: p.lvl })))); } catch (e) { return ''; } }
+function profCode(p) { try { return 'BYC1.' + btoa(unescape(encodeURIComponent(JSON.stringify({ a: p.age, s: p.sex, h: p.h, w: p.w, f: p.freq, g: p.goal, t: p.t, l: p.lvl, r: p.rm })))); } catch (e) { return ''; } }
 function parseProfile(txt) {
   txt = String(txt).trim(); var o = null;
   try {
-    if (txt.indexOf('BYC1.') === 0) { var j = JSON.parse(decodeURIComponent(escape(atob(txt.slice(5))))); o = { age: j.a, sex: j.s, h: j.h, w: j.w, freq: j.f, goal: j.g, t: j.t, lvl: j.l }; }
+    if (txt.indexOf('BYC1.') === 0) { var j = JSON.parse(decodeURIComponent(escape(atob(txt.slice(5))))); o = { age: j.a, sex: j.s, h: j.h, w: j.w, freq: j.f, goal: j.g, t: j.t, lvl: j.l, rm: j.r ? C.rmClean(j.r) : undefined }; }
     else if (txt.charAt(0) === '{') { var q = JSON.parse(txt); if (q.app === 'BeYourCoach') o = q.profile; }
   } catch (e) { o = null; }
   if (!C.profileOk(o)) return null;
@@ -3257,7 +3295,7 @@ function newExo(nm, nsets) {
   var e = LIBMAP[nm], X = model.ex[nm], pr = prof(), lv = LV(), st = C.starter(nm, e ? e.k : (X && X.kind), e ? e.bw : (X && X.bw), pr || {}, lv), w = 0, r = st.reps, last = '', hint = '';
   var ns = nsets || st.sets;
   if (X && X.hist.length) { var b = X.hist[X.hist.length - 1].best; if (b) { w = b.w > 0 ? b.w : 0; r = b.r || r; } last = (w ? kg(w) + ' kg × ' : '') + r; }
-  else if (e && !e.bw && pr) { w = C.startLoad(e, pr, lv); hint = 'Charge de départ estimée d\'après ton poids (' + String(pr.w).replace('.', ',') + ' kg)' + (lv === 'debutant' ? ', avec 3 reps en réserve' : '') + ' : ajuste-la selon ton ressenti.'; }
+  else if (e && !e.bw && pr) { w = C.startLoad(e, pr, lv); hint = pr.rm && C.rmFactor(e, pr, lv) !== 1 ? 'Charge de départ déduite de tes charges de référence, avec des reps en réserve : ajuste-la selon ton ressenti.' : 'Charge de départ estimée d\'après ton poids (' + String(pr.w).replace('.', ',') + ' kg)' + (lv === 'debutant' ? ', avec 3 reps en réserve' : '') + ' : ajuste-la selon ton ressenti.'; }
   else if (e && !e.bw) hint = 'Première fois : choisis une charge légère, avec 3 reps en réserve.';
   var sets = []; for (var i = 0; i < ns; i++) sets.push({ w: w, r: r, ok: false });
   return { name: nm, bw: e ? e.bw : !!(X && X.bw), last: last, hint: hint, sets: sets };
@@ -3431,7 +3469,10 @@ document.addEventListener('click', function (e) {
   else if (a === 'pfsave') {
     var d = S.pf, np = { age: parseInt(d.age, 10), h: parseInt(d.h, 10), w: parseFloat(String(d.w).replace(',', '.')), sex: d.sex, freq: d.freq, goal: d.goal };
     var tt = {}; C.TESTS.forEach(function (T) { var v = d.t && d.t[T[0]]; if (v !== undefined && v !== null && v !== '' && !isNaN(+v) && +v >= 0 && +v <= 300) tt[T[0]] = Math.round(+v); }); if (Object.keys(tt).length) np.t = tt; if (d.lvl && C.LEVELS.indexOf(d.lvl) >= 0) np.lvl = d.lvl;
-    if (!C.profileOk(np)) { S.pfErr = !np.sex ? 'Choisis une option pour le sexe.' : !(np.age >= 14 && np.age <= 90) ? 'Indique un âge entre 14 et 90 ans.' : !(np.h >= 120 && np.h <= 230) ? 'Indique ta taille en cm, entre 120 et 230.' : !(np.w >= 30 && np.w <= 250) ? 'Indique ton poids en kg, entre 30 et 250.' : !np.freq ? 'Choisis ta fréquence d\'entraînement.' : 'Choisis ton objectif.'; }
+    var rmBad = null; C.RM.forEach(function (R) { var v = d.rm && d.rm[R[0]]; if (!v) return; var hw = v.w !== undefined && String(v.w).trim() !== '', hr = v.r !== undefined && String(v.r).trim() !== ''; if (hw !== hr) rmBad = R[1]; else if (hw && !C.rmClean(( function () { var o = {}; o[R[0]] = v; return o; } )())[R[0]]) rmBad = R[1]; });
+    var rmc = C.rmClean(d.rm); if (Object.keys(rmc).length) np.rm = rmc;
+    if (rmBad) { S.pfErr = 'Charge de référence : pour « ' + rmBad + ' », indique la charge (en kg) et un nombre de répétitions entre 1 et 12, ou laisse les deux cases vides.'; }
+    else if (!C.profileOk(np)) { S.pfErr = !np.sex ? 'Choisis une option pour le sexe.' : !(np.age >= 14 && np.age <= 90) ? 'Indique un âge entre 14 et 90 ans.' : !(np.h >= 120 && np.h <= 230) ? 'Indique ta taille en cm, entre 120 et 230.' : !(np.w >= 30 && np.w <= 250) ? 'Indique ton poids en kg, entre 30 et 250.' : !np.freq ? 'Choisis ta fréquence d\'entraînement.' : 'Choisis ton objectif.'; }
     else { applyProfile(np); return; }
   }
   else if (a === 'fiche') S.fiche = S.fiche === k ? null : k;
@@ -3478,6 +3519,7 @@ document.addEventListener('input', function (e) {
   if (e.target.id === 'chatin') { S.draft = e.target.value; return; }
   var pm = { 'pf-age': 'age', 'pf-h': 'h', 'pf-w': 'w' }[e.target.id]; if (pm) { S.pf[pm] = e.target.value; return; }
   if (e.target.id === 'wt-in') { S.wtv = e.target.value; return; }
+  var rmm = /^pf-rm([wr])-(.+)$/.exec(e.target.id); if (rmm) { S.pf.rm = S.pf.rm || {}; S.pf.rm[rmm[2]] = S.pf.rm[rmm[2]] || {}; S.pf.rm[rmm[2]][rmm[1]] = e.target.value; return; }
   if (/^pf-t-/.test(e.target.id)) { S.pf.t = S.pf.t || {}; S.pf.t[e.target.id.slice(5)] = e.target.value; return; }
   var f = e.target.getAttribute && e.target.getAttribute('data-f');
   if (f && S.active) {
