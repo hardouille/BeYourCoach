@@ -193,6 +193,11 @@ select.search { appearance: auto; }
 .fiche { display: flex; flex-direction: column; gap: 8px; padding-top: 6px; }
 .figbox { position: relative; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 6px; }
 .figbox svg.fig { width: 100%; max-width: 440px; height: auto; display: block; margin: 0 auto; }
+.vid { position: relative; width: 100%; max-width: 440px; margin: 0 auto 8px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
+.vid iframe, .vid .vth { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.vid .vth { padding: 0; cursor: pointer; background: #000 center / cover no-repeat; color: #fff; display: flex; align-items: center; justify-content: center; font: inherit; }
+.vid .vth .vb { width: 58px; height: 58px; border-radius: 50%; background: rgba(0,0,0,.62); border: 2px solid #fff; display: flex; align-items: center; justify-content: center; }
+.vid .vth .vb::after { content: ""; margin-left: 4px; border-left: 16px solid #fff; border-top: 10px solid transparent; border-bottom: 10px solid transparent; }
 .ph { position: relative; width: 100%; max-width: 440px; margin: 0 auto; aspect-ratio: 3 / 2; border-radius: 8px; overflow: hidden; background: #000; }
 .ph img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .ph img.b { opacity: 0; animation: phflip 3.2s ease-in-out infinite; }
@@ -2436,12 +2441,23 @@ function historySection() {
 }
 
 function li(t) { return '<li>' + esc(t) + '</li>'; }
+/* Vidéos : lecteur YouTube officiel (aucune vidéo n'est copiée). nom de l'exercice -> [identifiant YouTube, chaîne] */
+var VIDEOS = {
+  'Tirage poitrine (poulie)': ['Mm8WCIQZPP4', 'Fit\'distance']
+};
+function videoHTML(name) {
+  var v = VIDEOS[name]; if (!v) return '';
+  var id = v[0], on = S.vp === id;
+  return '<div class="vid">' + (on ? '<iframe src="https://www.youtube-nocookie.com/embed/' + id + '?rel=0&amp;playsinline=1&amp;autoplay=1" title="Vidéo : ' + esc(name) + '" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>' :
+    '<button class="vth" data-act="vplay" data-k="' + id + '" style="background-image:url(https://i.ytimg.com/vi/' + id + '/hqdefault.jpg)" aria-label="Lire la vidéo de démonstration"><span class="vb"></span></button>') + '</div>' +
+    '<p class="legend">Vidéo : ' + esc(v[1]) + ' sur YouTube (connexion requise). <a href="https://www.youtube.com/watch?v=' + id + '" target="_blank" rel="noopener">Ouvrir sur YouTube</a></p>';
+}
 function ficheHTML(name) {
   var e = LIBMAP[name]; if (!e) return '';
   var front = (Anim.patterns[e.p] || {}).v === 'front';
   var ph = window.PHOTOS && PHOTOS[name];
   var phHTML = ph ? '<div class="ph"><img src="img/' + ph + '-0.jpg" alt="" class="phi a" loading="lazy"><img src="img/' + ph + '-1.jpg" alt="Position de fin de mouvement" class="phi b" loading="lazy"></div>' : '';
-  return '<div class="fiche"><div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
+  return '<div class="fiche">' + videoHTML(name) + '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
     '<p class="legend">' + (ph ? 'Photos : début puis fin du mouvement (free-exercise-db, domaine public). Le geste exact peut varier selon la machine.' : (front ? 'Vue de face.' : 'Vue de profil.') + ' La couleur montre ce qui travaille. Dessin schématique.') + '</p>' +
     '<div class="lab">Muscles</div><p class="why"><b>' + e.m + '</b>' + (e.sec ? ' · secondaires : ' + esc(e.sec) : '') + '</p>' +
     '<div class="lab">Matériel</div><p class="why">' + esc(e.eq) + '</p>' +
@@ -2763,6 +2779,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'hmore') S.hn += 20;
   else if (a === 'sfiche') S.sf = S.sf === k ? null : k;
   else if (a === 'wfiche') S.wf = S.wf === k ? null : k;
+  else if (a === 'vplay') S.vp = k;
   else if (a === 'anim') { Anim.setPlaying(!Anim.isPlaying()); document.querySelectorAll('.figbox').forEach(function (f) { f.classList.toggle('paused', !Anim.isPlaying()); }); }
   else if (a === 'addx') { var xi = S.xtra.indexOf(k); if (xi >= 0) S.xtra.splice(xi, 1); else S.xtra.push(k); }
   else if (a === 'start') startWorkout();
