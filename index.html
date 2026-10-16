@@ -623,6 +623,7 @@ function rank(name, kind) {
   if (/\(barre\)|barre EZ/i.test(name)) r += 20; else if (/haltère/i.test(name)) r += 10; else if (/\(machine\)|poulie/i.test(name)) r += 2;
   return r;
 }
+function quota(n, i) { return n <= 1 ? 6 : n === 2 ? [4, 2][i] : [3, 2, 1][i] || 0; }
 function slotKind(i) { return ['C', 'I', 'C', 'I', 'I', 'I'][i] || 'I'; }
 function recommend(model, muscles, now) {
   var warnings = [], per = muscles.map(function (m) {
@@ -640,17 +641,14 @@ function recommend(model, muscles, now) {
     }
     return { C: scored.filter(function (o) { return o.X.kind === 'C'; }), I: scored.filter(function (o) { return o.X.kind !== 'C'; }), n: 0 };
   });
-  /* 6 exercices au maximum, répartis entre les muscles choisis : un tour de table, puis un autre. */
-  var picked = [], guard = 0;
-  while (picked.length < MAX_EX && guard++ < 40) {
-    var got = false;
-    for (var pi = 0; pi < per.length && picked.length < MAX_EX; pi++) {
-      var P = per[pi], kd = slotKind(P.n), alt = kd === 'C' ? 'I' : 'C', o = P[kd].shift() || P[alt].shift();
-      if (o) { picked.push(o); P.n++; got = true; }
-    }
-    if (!got) break;
-  }
-  picked.sort(function (a, b) { return rank(b.X.name, b.X.kind) - rank(a.X.name, a.X.kind); });
+  /* Le 1er muscle est le muscle principal de la séance, les suivants le complètent : 6 exercices au maximum. */
+  var picked = per.map(function () { return []; });
+  function take(i) { var P = per[i], kd = slotKind(P.n), alt = kd === 'C' ? 'I' : 'C', o = P[kd].shift() || P[alt].shift(); if (o) { P.n++; picked[i].push(o); } return !!o; }
+  per.forEach(function (P, i) { var q = quota(per.length, i); for (var k = 0; k < q; k++) if (!take(i)) break; });
+  var left = MAX_EX - picked.reduce(function (t, l) { return t + l.length; }, 0), gd = 0;
+  while (left > 0 && gd++ < 20) { var got = false; for (var j = 0; j < per.length && left > 0; j++) if (take(j)) { left--; got = true; } if (!got) break; }
+  picked = picked.map(function (l) { return l.sort(function (a, b) { return rank(b.X.name, b.X.kind) - rank(a.X.name, a.X.kind); }); });
+  picked = picked.reduce(function (t, l) { return t.concat(l); }, []);
   var items = picked.map(function (o) { return planExo(o.X, now); });
   var first = items.filter(function (x) { return x.kind === 'C' && !x.bw && x.w >= 20; })[0];
   if (first) {
@@ -661,7 +659,7 @@ function recommend(model, muscles, now) {
   var rested = MUSCLES.map(function (m) { return muscleStatus(model, m, now); })
     .filter(function (s) { return s.state === 'ready' && muscles.indexOf(s.muscle) < 0; })
     .sort(function (a, b) { return (b.hours || 1e9) - (a.hours || 1e9); });
-  return { items: items, warnings: warnings, rested: rested };
+  return { items: items, warnings: warnings, rested: rested, focus: muscles[0] || null };
 }
 
 /* ---------- import multi-applis : tout est converti au format Hevy ---------- */
@@ -754,7 +752,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, rank: rank, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -1585,10 +1583,12 @@ function autoXtra() {
   var key = S.sel.join('|');
   if (S.xk === key) return;
   S.xk = key; S.xtra = [];
-  /* Première fois sur un muscle : 6 exercices au maximum au total, les plus lourds d'abord. */
-  var room = C.MAX_EX - C.recommend(model, S.sel, now()).items.length, lists = S.sel.filter(function (m) { return !hasHist(m); }).map(function (m) { return newFor(m).slice(); }), pick = [], g = 0;
-  while (pick.length < room && g++ < 20) { var any = false; lists.forEach(function (l) { if (pick.length < room && l.length) { pick.push(l.shift()); any = true; } }); if (!any) break; }
-  pick.sort(function (a, b) { return C.rank(b.n, b.k) - C.rank(a.n, a.k); }).forEach(function (e) { S.xtra.push(e.n); });
+  /* Première fois sur un muscle : 6 exercices au maximum au total, le muscle principal en premier, les plus lourds d'abord. */
+  var cnt = {}; C.recommend(model, S.sel, now()).items.forEach(function (it) { cnt[it.muscle] = (cnt[it.muscle] || 0) + 1; });
+  S.sel.forEach(function (m, i) {
+    if (hasHist(m)) return;
+    newFor(m).slice(0, Math.max(0, C.quota(S.sel.length, i) - (cnt[m] || 0))).forEach(function (e) { S.xtra.push(e.n); });
+  });
 }
 function newFor(m) {
   return LIB.filter(function (e) { return e.m === m && !model.ex[e.n]; }).sort(function (a, b) { return C.rank(b.n, b.k) - C.rank(a.n, a.k); }).slice(0, 6);
@@ -1614,6 +1614,13 @@ function companionsSection(byM) {
     return '<button class="comp" data-act="addm" data-m="' + esc(c.m) + '"><span class="cn"><i class="dot ' + c.state + '"></i>' + esc(c.m) + '</span><span class="cw">' + esc(c.why) + ' · ' + esc(c.label) + '</span></button>';
   }).join('') + '</div></section>';
 }
+function focusCard() {
+  if (!S.sel.length) return '';
+  var q = S.sel.length;
+  var txt = q === 1 ? 'Toute la séance travaille <b>' + esc(S.sel[0]) + '</b>.' : '<b>' + esc(S.sel[0]) + '</b> est le muscle principal (' + C.quota(q, 0) + ' exercices, les plus lourds en premier). ' + S.sel.slice(1).map(function (m, i) { return '<b>' + esc(m) + '</b> (' + C.quota(q, i + 1) + ')'; }).join(' et ') + ' complète' + (q > 2 ? 'nt' : '') + ' la fin de séance.';
+  return '<div class="msg tip"><div class="lab">Muscle à travailler en priorité</div><p class="why">' + txt + '</p>' +
+    (q > 1 ? '<div class="chips">' + S.sel.map(function (m, i) { return '<button class="chip' + (i === 0 ? ' go' : '') + '" data-act="focus" data-m="' + esc(m) + '" aria-pressed="' + (i === 0) + '">' + (i === 0 ? '★ ' : '') + esc(m) + '</button>'; }).join('') + '</div><p class="legend">Touche un muscle pour en faire le principal.</p>' : '') + '</div>';
+}
 function viewSeance() {
   if (S.active) return viewWorkout();
   if (S.summary) return viewSummary();
@@ -1626,12 +1633,13 @@ function viewSeance() {
       return '<button class="tile" data-act="pick" data-m="' + m + '" aria-pressed="' + on + '"><span class="n">' + m + '</span><span class="s"><i class="dot ' + s.state + '"></i>' + esc(s.label) + '</span><span class="k">' + s.s7 + ' séries / 7 j</span></button>';
     }).join('') + '</div>';
   }).join('');
-  var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche jusqu\'à trois muscles. Le point indique la récupération : vert, plus de 48 h.</p></div>' +
+  var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche jusqu\'à trois muscles : le premier est le muscle principal, les suivants le complètent. Le point indique la récupération : vert, plus de 48 h.</p></div>' +
     '<div class="chips">' + C.PRESETS.map(function (p, i) { return '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + tiles + '</section>';
   h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + h;
   h += companionsSection(byM);
   autoXtra();
   if (!S.sel.length) return h + '<p class="empty">Choisis un muscle pour obtenir ta séance.</p>';
+  h += focusCard();
   var rec = C.recommend(model, S.sel, n);
   if (rec.warnings.length) {
     var crit = rec.warnings.some(function (w) { return w.hours < 24; });
@@ -1834,7 +1842,7 @@ function startWorkout() {
     var e = LIBMAP[nm]; if (!e || S.active.exos.some(function (x) { return x.name === nm; })) return;
     S.active.exos.push({ name: nm, bw: e.bw, last: '', sets: [0, 1, 2].map(function () { return { w: 0, r: e.bw ? 8 : 10, ok: false }; }) });
   });
-  S.active.exos.sort(function (a, b) { var ea = LIBMAP[a.name], eb = LIBMAP[b.name], ka = (model.ex[a.name] || ea || {}).kind || (ea && ea.k), kb = (model.ex[b.name] || eb || {}).kind || (eb && eb.k); return C.rank(b.name, kb) - C.rank(a.name, ka); });
+  S.active.exos.sort(function (a, b) { var ea = LIBMAP[a.name], eb = LIBMAP[b.name], ka = (model.ex[a.name] || ea || {}).kind || (ea && ea.k), kb = (model.ex[b.name] || eb || {}).kind || (eb && eb.k); var ma = (model.ex[a.name] || ea || {}).muscle || (ea && ea.m), mb = (model.ex[b.name] || eb || {}).muscle || (eb && eb.m); var pa = ma === S.sel[0] ? 1000 : 0, pb = mb === S.sel[0] ? 1000 : 0; return (pb + C.rank(b.name, kb)) - (pa + C.rank(a.name, ka)); });
   S.xtra = []; S.xk = null; S.wf = null; S.wmsg = null; S.summary = null; saveActive(); wake();
 }
 function viewWorkout() {
@@ -1923,7 +1931,8 @@ document.addEventListener('click', function (e) {
   var a = b.getAttribute('data-act'), m = b.getAttribute('data-m'), k = b.getAttribute('data-k'), wi = +b.getAttribute('data-i'), wj = +b.getAttribute('data-j');
   if (a !== 'reset' && a !== 'wabort') S.confirm = null;
   if (a === 'tab') return go(b.getAttribute('data-t'));
-  if (a === 'pick') { var i = S.sel.indexOf(m); if (i >= 0) S.sel.splice(i, 1); else { S.sel.push(m); if (S.sel.length > 3) S.sel.shift(); } S.done = {}; S.xtra = []; S.xk = null; }
+  if (a === 'pick') { var i = S.sel.indexOf(m); if (i >= 0) S.sel.splice(i, 1); else { S.sel.push(m); if (S.sel.length > 3) S.sel.splice(1, 1); } S.done = {}; S.xtra = []; S.xk = null; }
+  else if (a === 'focus') { var fi = S.sel.indexOf(m); if (fi > 0) { S.sel.splice(fi, 1); S.sel.unshift(m); } S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'swap') { S.sel = [m]; S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'preset') { S.sel = C.PRESETS[wi][1].slice(); S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'addm') { if (S.sel.indexOf(m) < 0 && S.sel.length < 3) S.sel.push(m); S.done = {}; S.xtra = []; S.xk = null; }
