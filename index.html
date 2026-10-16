@@ -728,25 +728,32 @@ function mealOf(tpl, tg) {
   return { t: tpl.t, items: out, kcal: Math.round(tot[0] / 5) * 5, P: Math.round(tot[1]), C: Math.round(tot[2]), F: Math.round(tot[3]) };
 }
 /* type de jour : 'heavy' (séance de gros muscles), 'light' (autre séance), 'rest' */
-function nutrition(p, dayType, variants) {
+function nutrition(p, dayType, variants, when, adj) {
   var e = estimate(p), young = p.age < 18;
-  var base = young ? e.tdee : e.kcal, f = dayType === 'heavy' ? 1.08 : dayType === 'light' ? 1.03 : 0.93;
+  var base = (young ? e.tdee : e.kcal) + (young ? 0 : (adj || 0)), f = dayType === 'heavy' ? 1.08 : dayType === 'light' ? 1.03 : 0.93;
   var kcal = Math.round(base * f / 50) * 50, P = e.protein;
   var F = Math.round(Math.max(0.8 * p.w, 0.25 * kcal / 9)), Cg = Math.max(0, Math.round((kcal - 4 * P - 9 * F) / 4));
   var train = dayType !== 'rest';
   var shares = train ? { pdj: 0.25, dej: 0.28, col: 0.2, din: 0.27 } : { pdj: 0.27, dej: 0.33, col: 0.12, din: 0.28 };
   var cshare = train ? { pdj: 0.25, dej: 0.27, col: 0.23, din: 0.25 } : { pdj: 0.27, dej: 0.32, col: 0.12, din: 0.29 };
   var pshare = { pdj: 0.25, dej: 0.3, col: 0.15, din: 0.3 };
-  var labels = { pdj: 'Petit-déjeuner', dej: 'Déjeuner', col: train ? 'Collation ou après la séance' : 'Collation', din: 'Dîner' };
+  /* repas liés à l'heure de la séance : plus de glucides avant, plus de protéines et de glucides après */
+  var pre = null, post = null;
+  if (train && when) { post = when === 'matin' ? 'pdj' : when === 'midi' ? 'dej' : 'din'; pre = when === 'matin' ? null : when === 'midi' ? 'pdj' : 'col'; }
+  function boost(sh, k, add) { if (!k) return; var tot = 0, o; for (o in sh) tot += sh[o]; sh[k] += add; var t2 = tot + add; for (o in sh) sh[o] = sh[o] * tot / t2; }
+  if (post) { boost(pshare, post, 0.08); boost(cshare, post, 0.08); }
+  if (pre) boost(cshare, pre, 0.05);
+  var labels = { pdj: 'Petit-déjeuner', dej: 'Déjeuner', col: train && !when ? 'Collation ou après la séance' : 'Collation', din: 'Dîner' };
   variants = variants || {};
   var meals = ['pdj', 'dej', 'col', 'din'].map(function (k) {
     var list = MEALS[k], tpl = list[(variants[k] || 0) % list.length];
     var tg = { P: P * pshare[k], C: Cg * cshare[k], F: F * shares[k] };
-    var m = mealOf(tpl, tg); m.key = k; m.label = labels[k]; m.count = list.length; return m;
+    var m = mealOf(tpl, tg); m.key = k; m.label = labels[k]; m.count = list.length; m.tag = k === post ? 'Après la séance' : k === pre ? 'Avant la séance' : ''; if (m.tag && k === 'col') m.label = 'Collation'; return m;
   });
   var tot = meals.reduce(function (t, m) { return { kcal: t.kcal + m.kcal, P: t.P + m.P, C: t.C + m.C, F: t.F + m.F }; }, { kcal: 0, P: 0, C: 0, F: 0 });
   return {
     dayType: dayType, kcal: kcal, P: P, C: Cg, F: F, meals: meals, total: tot, young: young,
+    when: train ? when || null : null, adj: adj || 0,
     water: Math.round((33 * p.w + (train ? 500 : 0)) / 100) / 10,
     post: { P: Math.round(0.35 * p.w), C: [Math.round(0.5 * p.w), Math.round(1 * p.w)] }
   };
@@ -757,6 +764,28 @@ function nutrition(p, dayType, variants) {
 var DAYS = ['Lundi', 'Mardi', 'Mercredi', 'Jeudi', 'Vendredi', 'Samedi', 'Dimanche'];
 var TRAIN_DAYS = { 3: [0, 2, 4], 4: [0, 1, 3, 4], 5: [0, 1, 2, 4, 5] };
 var BIG = ['Quadriceps', 'Ischios', 'Fessiers', 'Dos'];
+/* ---------- suivi du poids : tendance et ajustement automatique des calories ---------- */
+function weightTrend(entries, now, since) {
+  var a = (entries || []).filter(function (e) { return e && e.w > 0 && now - e.t <= 28 * DAY && (!since || e.t > since); }).sort(function (x, y) { return x.t - y.t; });
+  if (a.length < 3) return null;
+  var span = (a[a.length - 1].t - a[0].t) / DAY; if (span < 10) return null;
+  var n = a.length, sx = 0, sy = 0, sxy = 0, sxx = 0, t0 = a[0].t;
+  a.forEach(function (e) { var x = (e.t - t0) / DAY; sx += x; sy += e.w; sxy += x * e.w; sxx += x * x; });
+  var den = n * sxx - sx * sx; if (!den) return null;
+  var slope = (n * sxy - sx * sy) / den;
+  return { rate: Math.round(slope * 7 * 100) / 100, n: n, days: Math.round(span), latest: a[a.length - 1].w };
+}
+function adjustFor(goal, rate) {
+  if (goal === 'perte') return rate > -0.15 ? 100 * -1 : rate < -1 ? 100 : 0;
+  if (goal === 'muscle') return rate < 0.1 ? 100 : rate > 0.6 ? -100 : 0;
+  return rate > 0.25 ? -100 : rate < -0.25 ? 100 : 0;
+}
+function weightVerdict(goal, rate) {
+  var d = adjustFor(goal, rate);
+  var tgt = goal === 'perte' ? 'perdre 0,25 à 0,75 kg par semaine' : goal === 'muscle' ? 'prendre 0,15 à 0,5 kg par semaine' : 'rester stable';
+  if (!d) return { delta: 0, t: 'Ton poids évolue au bon rythme (objectif : ' + tgt + '). On garde tes calories.' };
+  return { delta: d, t: 'Objectif : ' + tgt + '. Ton rythme est de ' + String(rate).replace('.', ',') + ' kg par semaine, donc tes calories ' + (d > 0 ? 'montent' : 'baissent') + ' de 100 par jour.' };
+}
 function weekMenu(p, avoid) {
   var plan = weekPlan(p, { avoid: avoid }), pos = TRAIN_DAYS[plan.length] || TRAIN_DAYS[3], k = 0;
   return DAYS.map(function (name, d) {
@@ -1029,7 +1058,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, startLoad: startLoad, weekPlan: weekPlan, weekMenu: weekMenu, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, startLoad: startLoad, weekPlan: weekPlan, weekMenu: weekMenu, weightTrend: weightTrend, adjustFor: adjustFor, weightVerdict: weightVerdict, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -2103,6 +2132,24 @@ function planCard() {
     }).join('') + '</div></section>';
 }
 /* ---------- alimentation ---------- */
+function readJ(k, d) { try { var v = JSON.parse(lsGet(k)); return v == null ? d : v; } catch (e) { return d; } }
+var WTS = readJ('cds.weights', []); if (!Array.isArray(WTS)) WTS = [];
+var NADJ = readJ('cds.nutadj', {adj: 0, t: 0}); if (typeof NADJ.adj !== 'number') NADJ = {adj: 0, t: 0};
+var WHEN = lsGet('cds.when') || 'soir';
+function pw() { var p = prof(); if (!p) return p; var l = WTS.length ? WTS.slice().sort(function (a, b) { return a.t - b.t; }).pop() : null; return l && now() - l.t < 60 * 864e5 ? Object.assign({}, p, { w: l.w }) : p; }
+function addWeight(w) {
+  if (!(w >= 30 && w <= 250)) return false;
+  var d = Math.floor(now() / 864e5) * 864e5; WTS = WTS.filter(function (e) { return Math.floor(e.t / 864e5) * 864e5 !== d; }); WTS.push({ t: now(), w: Math.round(w * 10) / 10 }); WTS.sort(function (a, b) { return a.t - b.t; }); WTS = WTS.slice(-200);
+  lsSet('cds.weights', JSON.stringify(WTS)); autoAdjust(); return true;
+}
+function autoAdjust() {
+  var p = prof(); if (!p || p.age < 18) return;
+  if (!NADJ.t && WTS.length) NADJ.t = WTS[0].t - 1;
+  var tr = C.weightTrend(WTS, now(), NADJ.t); if (!tr) return;
+  var v = C.weightVerdict(p.goal, tr.rate);
+  NADJ = { adj: Math.max(-400, Math.min(400, NADJ.adj + v.delta)), t: now(), last: v.delta, rate: tr.rate };
+  lsSet('cds.nutadj', JSON.stringify(NADJ));
+}
 function dayTypeAuto() {
   if (!S.sel || !S.sel.length) return 'rest';
   return SEL().some(function (m) { return ['Quadriceps', 'Ischios', 'Fessiers', 'Dos'].indexOf(m) >= 0; }) ? 'heavy' : 'light';
@@ -2111,12 +2158,27 @@ function dayTypeAuto() {
 function viewRepas() {
   var p = prof();
   if (!p) return viewRepasJour();
-  var rt = S.rt || 'jour', T = [['jour', 'Aujourd\'hui'], ['semaine', 'Semaine'], ['courses', 'Courses'], ['conseils', 'Conseils']];
+  var rt = S.rt || 'jour', T = [['jour', 'Aujourd\'hui'], ['poids', 'Poids'], ['semaine', 'Semaine'], ['courses', 'Courses'], ['conseils', 'Conseils']];
   var tabs = '<div class="chips">' + T.map(function (t) { return '<button class="chip' + (rt === t[0] ? ' go' : '') + '" data-act="rt" data-v="' + t[0] + '" aria-pressed="' + (rt === t[0]) + '">' + t[1] + '</button>'; }).join('') + '</div>';
-  var body = rt === 'semaine' ? viewRepasSemaine(p) : rt === 'courses' ? viewRepasCourses(p) : rt === 'conseils' ? viewRepasConseils(p) : viewRepasJour();
+  var body = rt === 'poids' ? viewPoids(p) : rt === 'semaine' ? viewRepasSemaine(p) : rt === 'courses' ? viewRepasCourses(p) : rt === 'conseils' ? viewRepasConseils(p) : viewRepasJour();
   return '<section class="sec">' + tabs + '</section>' + body;
 }
 var DTL = { heavy: 'séance lourde', light: 'séance légère', rest: 'repos' };
+function viewPoids(p) {
+  var tr = C.weightTrend(WTS, now(), 0), last = WTS.slice(-8).reverse(), g = C.GOALS.filter(function (x) { return x[0] === p.goal; })[0][1];
+  var svg = '';
+  if (WTS.length >= 2) {
+    var a = WTS.slice(-30), mn = Math.min.apply(null, a.map(function (e) { return e.w; })), mx = Math.max.apply(null, a.map(function (e) { return e.w; })), t0 = a[0].t, t1 = a[a.length - 1].t || 1, W = 300, H = 90;
+    var pts = a.map(function (e) { return (8 + (t1 === t0 ? 0 : (e.t - t0) / (t1 - t0)) * (W - 16)).toFixed(1) + ',' + (H - 10 - (mx === mn ? 0.5 : (e.w - mn) / (mx - mn)) * (H - 20)).toFixed(1); }).join(' ');
+    svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="100%" role="img" aria-label="Évolution du poids"><polyline points="' + pts + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg><div class="legend">De ' + String(mn).replace('.', ',') + ' à ' + String(mx).replace('.', ',') + ' kg sur les ' + a.length + ' dernières pesées.</div>';
+  }
+  var v = tr ? C.weightVerdict(p.goal, tr.rate) : null, cur = NADJ.adj ? ' Réglage actuel : ' + (NADJ.adj > 0 ? '+' : '−') + Math.abs(NADJ.adj) + ' kcal par jour.' : '';
+  return '<section class="sec"><div><h2>Suivi du poids</h2><p class="sub">' + esc(g) + '. Pèse-toi 2 à 3 matins par semaine, à jeun. Après deux semaines, l\'appli regarde ta tendance et ajuste tes calories toute seule, par pas de 100.</p></div>' +
+    '<div class="card"><div class="lab">Ma pesée du jour</div><div class="row"><input class="fin" id="wt-in" type="text" inputmode="decimal" placeholder="kg" value="' + esc(S.wtv == null ? '' : S.wtv) + '" aria-label="Poids en kg"><button class="btn primary" data-act="wtadd">Enregistrer</button></div>' + (S.wtErr ? '<div class="msg err">' + esc(S.wtErr) + '</div>' : '') + '</div>' +
+    (svg ? '<div class="card">' + svg + '</div>' : '') +
+    '<div class="msg tip"><div class="lab">Ajustement des calories</div><p class="why">' + (v ? esc(v.t) : (WTS.length < 3 ? 'Il faut au moins 3 pesées sur 10 jours pour calculer ta tendance.' : 'Continue de te peser : il faut 10 jours de pesées pour calculer ta tendance.')) + cur + '</p>' + (NADJ.adj ? '<button class="btn" data-act="wtreset">Remettre à zéro</button>' : '') + (p.age < 18 ? '<p class="legend">À ton âge, aucun ajustement automatique n\'est appliqué.</p>' : '') + '</div>' +
+    (last.length ? '<div class="card"><div class="lab">Dernières pesées</div><ul class="how">' + last.map(function (e) { return '<li>' + C.fmtDate(e.t) + ' : <b>' + String(e.w).replace('.', ',') + ' kg</b> <button class="btn x" data-act="wtdel" data-k="' + e.t + '" aria-label="Supprimer cette pesée">×</button></li>'; }).join('') + '</ul></div>' : '') + '</section>';
+}
 function viewRepasSemaine(p) {
   var wk = C.weekMenu(p, injured()), nf = function (x) { return x.toLocaleString('fr-FR'); };
   return '<section class="sec"><div><h2>Ta semaine</h2><p class="sub">Un menu par jour, calé sur tes séances types : plus de glucides les jours d\'entraînement, un peu moins au repos. Les menus changent chaque jour pour varier.</p></div>' +
@@ -2168,21 +2230,22 @@ function viewRepasConseils(p) {
 function viewRepasJour() {
   var p = prof();
   if (!p) return '<section class="sec"><div><h2>Alimentation</h2><p class="sub">Pour calculer tes calories et tes repas, j\'ai besoin de ton âge, de ton gabarit et de ton objectif.</p></div><button class="btn primary" data-act="editprofile">Compléter mon profil</button></section>';
-  var dt = S.nd || dayTypeAuto(), n = C.nutrition(p, dt, S.mv || {});
+  var dt = S.nd || dayTypeAuto(), n = C.nutrition(pw(), dt, S.mv || {}, dt === 'rest' ? null : WHEN, NADJ.adj);
   var g = C.GOALS.filter(function (x) { return x[0] === p.goal; })[0][1];
   var DT = [['heavy', 'Séance lourde'], ['light', 'Séance légère'], ['rest', 'Repos']];
   var nf = function (x) { return x.toLocaleString('fr-FR'); };
   var h = '<section class="sec"><div><h2>Alimentation</h2><p class="sub">' + esc(g) + '. ' + (S.sel && S.sel.length ? 'Séance choisie : ' + S.sel.map(esc).join(' + ') + '.' : 'Aucune séance choisie : jour de repos par défaut.') + '</p></div>' +
     '<div class="chips">' + DT.map(function (d) { return '<button class="chip' + (dt === d[0] ? ' go' : '') + '" data-act="nd" data-v="' + d[0] + '" aria-pressed="' + (dt === d[0]) + '">' + d[1] + '</button>'; }).join('') + '</div>' +
-    '<div class="est"><div class="stat"><b>' + nf(n.kcal) + '</b><span>kcal</span></div><div class="stat"><b>' + n.P + ' g</b><span>protéines</span></div><div class="stat"><b>' + n.C + ' g</b><span>glucides</span></div><div class="stat"><b>' + n.F + ' g</b><span>lipides</span></div></div>' +
+    (dt === 'rest' ? '' : '<div class="lab">Tu t\'entraînes plutôt…</div><div class="chips">' + [['matin', 'Le matin'], ['midi', 'Le midi'], ['soir', 'Le soir']].map(function (w) { return '<button class="chip' + (WHEN === w[0] ? ' go' : '') + '" data-act="when" data-v="' + w[0] + '" aria-pressed="' + (WHEN === w[0]) + '">' + w[1] + '</button>'; }).join('') + '</div>') +
+    '<div class="est"><div class="stat"><b>' + nf(n.kcal) + '</b><span>kcal' + (NADJ.adj ? ' (' + (NADJ.adj > 0 ? '+' : '−') + Math.abs(NADJ.adj) + ' selon ton poids)' : '') + '</span></div><div class="stat"><b>' + n.P + ' g</b><span>protéines</span></div><div class="stat"><b>' + n.C + ' g</b><span>glucides</span></div><div class="stat"><b>' + n.F + ' g</b><span>lipides</span></div></div>' +
     '<p class="legend">' + (dt === 'rest' ? 'Jour de repos : un peu moins de glucides, les protéines restent identiques.' : dt === 'heavy' ? 'Séance lourde : plus de glucides pour l\'énergie et la récupération.' : 'Séance légère : un petit supplément de glucides.') + (n.young ? ' À ton âge, je n\'applique aucun déficit calorique : parles-en à un professionnel.' : '') + '</p></section>';
   h += '<section class="sec"><div><h2>Tes repas</h2><p class="sub">Quantités calculées pour tes objectifs du jour. Touche « Autre idée » pour changer de menu.</p></div>' + n.meals.map(function (m) {
-    return '<article class="card"><div class="row"><div><div class="lab">' + esc(m.label) + '</div><div class="ename">' + esc(m.t) + '</div></div><button class="btn" data-act="mv" data-k="' + m.key + '">Autre idée</button></div>' +
+    return '<article class="card"><div class="row"><div><div class="lab">' + esc(m.label) + (m.tag ? ' · <b>' + m.tag + '</b>' : '') + '</div><div class="ename">' + esc(m.t) + '</div></div><button class="btn" data-act="mv" data-k="' + m.key + '">Autre idée</button></div>' +
       '<ul class="how">' + m.items.map(function (i) { return '<li>' + esc(i.txt) + (i.txt.indexOf(i.n.toLowerCase()) >= 0 || /banane|pomme|œuf|dose/.test(i.txt) ? '' : ' ' + esc(i.n.toLowerCase().replace(/ \(ml\)$/, ''))) + '</li>'; }).join('') + '</ul>' +
       '<div class="meth"><span><b>' + m.kcal + '</b> kcal</span><span>P <b>' + m.P + '</b> g</span><span>G <b>' + m.C + '</b> g</span><span>L <b>' + m.F + '</b> g</span></div></article>';
   }).join('') + '<p class="legend">Total des menus : ' + nf(n.total.kcal) + ' kcal, ' + n.total.P + ' g de protéines, ' + n.total.C + ' g de glucides, ' + n.total.F + ' g de lipides. Poids des féculents et viandes : cuits.</p></section>';
   h += '<section class="sec"><div class="card tipcard"><div class="lab">Autour de la séance</div><ul>' +
-    '<li>Après la séance, dans les 2 heures : environ ' + n.post.P + ' g de protéines et ' + n.post.C[0] + ' à ' + n.post.C[1] + ' g de glucides. Il n\'y a pas de « fenêtre de 30 minutes » : l\'important est le total de la journée.</li>' +
+    (n.when ? '<li>' + ({ matin: 'Séance le matin : un fruit ou une tranche de pain 30 à 60 min avant, puis le petit-déjeuner juste après.', midi: 'Séance en fin de matinée : le petit-déjeuner est ton repas d\'avant séance, le déjeuner celui d\'après.', soir: 'Séance le soir : la collation fait office de repas d\'avant séance, le dîner celui d\'après.' })[n.when] + '</li>' : '') + '<li>Après la séance, dans les 2 heures : environ ' + n.post.P + ' g de protéines et ' + n.post.C[0] + ' à ' + n.post.C[1] + ' g de glucides. Il n\'y a pas de « fenêtre de 30 minutes » : l\'important est le total de la journée.</li>' +
     '<li>Avant la séance, 1 à 2 h avant : un repas ou une collation avec des glucides et peu de graisses.</li>' +
     '<li>Eau : environ ' + String(n.water).replace('.', ',') + ' L par jour, un peu plus s\'il fait chaud ou si tu transpires beaucoup.</li>' +
     '<li>Sommeil : 7 à 9 h par nuit, c\'est là que tu récupères et que tu progresses.</li>' +
@@ -2467,10 +2530,12 @@ function render() {
   var lg = $('blogo'); if (lg && !lg.getAttribute('src')) lg.setAttribute('src', window.LOGO_URI);
   if (S.onb) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewOnboarding(); return; }
   if (S.home || (!hasData() && !S.active && !S.fresh)) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewHome(); return; }
-  if (!hasData()) { $('meta').textContent = S.active ? metaText() : ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewSeance(); Anim.mount(); return; }
+  if (!hasData() && !(prof() && !S.active)) { $('meta').textContent = S.active ? metaText() : ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewSeance(); Anim.mount(); return; }
+  var NOD = !hasData(), TB = NOD ? TABS.filter(function (t) { return t[0] !== 'progres'; }) : TABS;
+  if (NOD && S.tab === 'progres') S.tab = 'seance';
   $('meta').textContent = metaText();
   if (S.active) { $('meta').setAttribute('data-act', 'tab'); $('meta').setAttribute('data-t', 'seance'); } else { $('meta').removeAttribute('data-act'); $('meta').removeAttribute('data-t'); }
-  $('tabs').innerHTML = TABS.map(function (t) { return '<button data-act="tab" data-t="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true">' + t[2] + '</svg>' + t[1] + '</button>'; }).join('');
+  $('tabs').innerHTML = TB.map(function (t) { return '<button data-act="tab" data-t="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true">' + t[2] + '</svg>' + t[1] + '</button>'; }).join('');
   var v = S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData();
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
@@ -2646,6 +2711,10 @@ document.addEventListener('click', function (e) {
   else if (a === 'evoff') { var evb = readEvents(); evb.push({ t: Date.now(), r: 'ignore', off: true }); writeEvents(evb); S.evwarn = null; S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'rt') { S.rt = b.dataset.v; window.scrollTo(0, 0); }
   else if (a === 'nd') { S.nd = b.dataset.v; }
+  else if (a === 'when') { WHEN = b.dataset.v; lsSet('cds.when', WHEN); }
+  else if (a === 'wtadd') { var wv = parseFloat(String(S.wtv).replace(',', '.')); if (addWeight(wv)) { S.wtv = ''; S.wtErr = null; } else S.wtErr = 'Indique ton poids en kg, entre 30 et 250.'; }
+  else if (a === 'wtdel') { WTS = WTS.filter(function (e) { return String(e.t) !== k; }); lsSet('cds.weights', JSON.stringify(WTS)); }
+  else if (a === 'wtreset') { NADJ = { adj: 0, t: now() }; lsSet('cds.nutadj', JSON.stringify(NADJ)); }
   else if (a === 'mv') { S.mv = S.mv || {}; S.mv[k] = (S.mv[k] || 0) + 1; }
   else if (a === 'plansel') { var pl = C.weekPlan(prof(), { avoid: injured(), level: LV() }); S.sel = pl[wi].slice(); S.done = {}; S.xtra = []; S.xk = null; S.evwarn = null; window.scrollTo(0, 0); }
   else if (a === 'aion') { AI.ok = true; saveAI(); }
@@ -2715,6 +2784,7 @@ document.addEventListener('input', function (e) {
   if (e.target.id === 'q') { S.q = e.target.value; render(); return; }
   if (e.target.id === 'chatin') { S.draft = e.target.value; return; }
   var pm = { 'pf-age': 'age', 'pf-h': 'h', 'pf-w': 'w' }[e.target.id]; if (pm) { S.pf[pm] = e.target.value; return; }
+  if (e.target.id === 'wt-in') { S.wtv = e.target.value; return; }
   if (/^pf-t-/.test(e.target.id)) { S.pf.t = S.pf.t || {}; S.pf.t[e.target.id.slice(5)] = e.target.value; return; }
   var f = e.target.getAttribute && e.target.getAttribute('data-f');
   if (f && S.active) {
