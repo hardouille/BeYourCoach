@@ -86,6 +86,8 @@ nav.tabs {
   display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
   padding: 6px max(8px, env(safe-area-inset-right, 0px)) calc(6px + env(safe-area-inset-bottom, 0px)) max(8px, env(safe-area-inset-left, 0px));
 }
+nav.tabs.lift { bottom: 64px; border-bottom: 1px solid var(--line); }
+main.lift { padding-bottom: 160px; }
 .tabs button { border: 0; background: none; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--muted); font-size: 11px; font-weight: 500; border-radius: 8px; min-width: 0; }
 .tabs svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tabs button[aria-current="page"] { color: var(--accent); font-weight: 600; }
@@ -1970,6 +1972,26 @@ document.addEventListener('change', function (e) {
   fr.readAsText(e.target.files[0]);
 });
 render();
+})();
+
+/* Un bandeau externe (ex. « Powered by Netlify ») peut recouvrir les onglets : on remonte la barre si besoin. */
+(function () {
+  function check() {
+    try {
+      var nav = document.getElementById('tabs'); if (!nav) return;
+      var main = document.querySelector('main');
+      nav.classList.remove('lift'); if (main) main.classList.remove('lift');
+      var r = nav.getBoundingClientRect(), blocked = false;
+      [0.12, 0.37, 0.62, 0.87].forEach(function (f) {
+        var el = document.elementFromPoint(r.left + r.width * f, r.top + r.height * 0.5);
+        if (el && !nav.contains(el)) blocked = true;
+      });
+      if (blocked) { nav.classList.add('lift'); if (main) main.classList.add('lift'); }
+    } catch (e) {}
+  }
+  [800, 2000, 4000, 8000].forEach(function (t) { setTimeout(check, t); });
+  window.addEventListener('resize', check);
+  window.addEventListener('click', function () { setTimeout(check, 400); });
 })();
 </script>
 <script>if("serviceWorker" in navigator&&location.protocol.indexOf("http")===0){window.addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
