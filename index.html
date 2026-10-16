@@ -47,6 +47,8 @@ button { cursor: pointer; }
 .home { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 14px; padding-top: 8px; }
 .hlogo { width: min(220px, 56vw); height: auto; border-radius: 22.5%; box-shadow: 0 0 60px rgba(25, 211, 230, .25), 0 0 0 1px var(--line); }
 .home h1 { font: italic 800 clamp(26px, 8vw, 36px)/1.1 var(--f-body); letter-spacing: -.02em; margin: 6px 0 0; text-wrap: balance; }
+.coachnote { width: 100%; text-align: left; font-size: 13.5px; line-height: 1.5; color: var(--muted); border: 1px solid var(--line); border-left: 3px solid var(--accent); background: var(--surface); border-radius: 10px; padding: 10px 12px; }
+.coachnote b { display: block; color: var(--ink); font-size: 14.5px; margin-bottom: 2px; }
 .home .tag { color: var(--muted); font-size: 15.5px; max-width: 30ch; margin: 0; text-wrap: balance; }
 .home .acts { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 6px; }
 .home .acts .sub { margin: -4px 0 4px; }
@@ -1839,6 +1841,7 @@ function viewHome() {
     '<label class="btn big">' + (d ? 'Importer un nouveau fichier CSV' : 'Importer mon fichier CSV') + '<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label>' +
     '<label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label>' +
     '<button class="btn big' + (d ? '' : ' primary') + '" data-act="blank">Commencer un entraînement vierge</button></div>' +
+    '<div class="coachnote"><b>Rien ne remplace un vrai coach.</b> BeYourCoach t\'accompagne à chaque séance, mais seul un coach peut corriger ton geste, t\'écouter et bâtir un programme vraiment sur mesure. Pour ta technique, une douleur ou un objectif précis, entoure-toi d\'un pro.</div>' +
     '<p class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes.<br>Tes données restent sur cet appareil, elles ne sont envoyées nulle part.</p>' +
     '<button class="btn" data-act="editprofile">' + (prof() ? 'Mon profil' : 'Créer mon profil') + '</button>' + '<details><summary>Comment exporter mon historique ?</summary><div class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier avec « Importer ».</li></ol><div class="lab">Autres applis</div><ol class="how"><li><b>Strong :</b> Réglages, « Export Strong Data » (iPhone) ou « Export Data » (Android).</li><li><b>Fitbod :</b> onglet Log, roue crantée, « Export Workout Data ». Poids en livres.</li><li><b>JEFIT :</b> depuis le site jefit.com : My Jefit, Settings, Data Controls, Export Data.</li><li><b>FitNotes :</b> Réglages, sauvegarde, export tableur.</li></ol></div></details></section>';
 }
