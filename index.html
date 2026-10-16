@@ -1398,10 +1398,13 @@ try { if (navigator.storage && navigator.storage.persist) navigator.storage.pers
 var t0 = lsGet('cds.tab'); if (t0 && TABS.some(function (t) { return t[0] === t0; })) S.tab = t0;
 /* Actualiser la page : on revient là où on était (accueil, choix des muscles, séance en cours). */
 try {
-  var nv = JSON.parse(sessionStorage.getItem('cds.nav') || 'null');
-  if (nv && nv.home === false) { S.home = false; S.fresh = !!nv.fresh; if (nv.sel) S.sel = nv.sel; if (nv.done) S.done = nv.done; if (nv.xtra) S.xtra = nv.xtra; }
+  var nv = JSON.parse(localStorage.getItem('cds.nav') || 'null');
+  if (nv && nv.home === false) {
+    S.home = false; S.fresh = !!nv.fresh;
+    if (nv.t && Date.now() - nv.t < 12 * 3600 * 1000) { if (nv.sel) S.sel = nv.sel; if (nv.done) S.done = nv.done; if (nv.xtra) S.xtra = nv.xtra; }
+  }
 } catch (e) {}
-function saveNav() { try { sessionStorage.setItem('cds.nav', JSON.stringify({ home: S.home, fresh: S.fresh, sel: S.sel, done: S.done, xtra: S.xtra })); } catch (e) {} }
+function saveNav() { try { localStorage.setItem('cds.nav', JSON.stringify({ t: Date.now(), home: S.home, fresh: S.fresh, sel: S.sel, done: S.done, xtra: S.xtra })); } catch (e) {} }
 
 function now() { return C.nowNaive(); }
 function kg(w) { return C.fmtKg(w); }
