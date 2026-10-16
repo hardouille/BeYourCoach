@@ -86,7 +86,7 @@ h2 { font: 800 22px/1.1 var(--f-display); letter-spacing: .03em; text-transform:
 
 nav.tabs {
   background: var(--bg); border-bottom: 1px solid var(--line);
-  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px;
   padding: 4px max(8px, env(safe-area-inset-right, 0px)) 4px max(8px, env(safe-area-inset-left, 0px));
 }
 nav.tabs:empty { display: none; }
@@ -99,6 +99,12 @@ nav.tabs:empty { display: none; }
 .tile[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
 .tile .n { font: 800 min(16.5px, 3.8vw)/1.1 var(--f-display); letter-spacing: .02em; text-transform: uppercase; overflow-wrap: normal; word-break: keep-all; }
 .tile .s { font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 5px; }
+.plan { display: flex; flex-direction: column; gap: 8px; }
+.pday { display: flex; align-items: center; gap: 10px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.pday.next { border-color: var(--accent); background: var(--accent-soft); }
+.pn { font: 800 16px var(--f-display); color: var(--accent); min-width: 20px; }
+.pm { flex: 1; min-width: 0; font-size: 14px; }
+.tabs button { font-size: 10.5px; }
 .meth { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); }
 .meth b { color: var(--ink); font-weight: 600; }
 .tile .k { font: 10.5px var(--f-mono); color: var(--muted); white-space: nowrap; }
@@ -558,6 +564,111 @@ function weekly(model, now, n) {
   return out;
 }
 
+
+/* ---------- plan de semaine ---------- */
+var SPLITS = {
+  3: [['Quadriceps', 'Pectoraux', 'Dos'], ['Dos', 'Épaules', 'Ischios'], ['Pectoraux', 'Fessiers', 'Biceps']],
+  4: [['Pectoraux', 'Dos', 'Épaules'], ['Quadriceps', 'Ischios', 'Mollets'], ['Dos', 'Pectoraux', 'Biceps'], ['Fessiers', 'Ischios', 'Abdos']],
+  5: [['Pectoraux', 'Épaules', 'Triceps'], ['Dos', 'Épaules arrière', 'Biceps'], ['Quadriceps', 'Ischios', 'Mollets'], ['Épaules', 'Pectoraux', 'Triceps'], ['Fessiers', 'Ischios', 'Abdos']]
+};
+function weekPlan(p, opts) {
+  opts = opts || {};
+  var n = p.freq === '1-3' ? 3 : p.freq === '3-5' ? 4 : 5;
+  var base = SPLITS[n] || SPLITS[3];
+  return base.map(function (day) {
+    var d = day.filter(function (m) { return m !== opts.avoid; });
+    if (!d.length) d = [day[0] === opts.avoid ? day[1] : day[0]];
+    return d;
+  });
+}
+
+/* ---------- alimentation (estimations générales, pas un avis médical) ---------- */
+/* aliment : [kcal, protéines, glucides, lipides] pour 100 g ; u = unité usuelle [nom, pluriel, grammes] */
+var FOOD = {
+  avoine: { n: 'Flocons d\'avoine', m: [370, 13, 60, 7] }, pain: { n: 'Pain complet', m: [250, 9, 45, 3] }, riz: { n: 'Riz cuit', m: [130, 2.7, 28, 0.3] },
+  pates: { n: 'Pâtes cuites', m: [150, 5.5, 30, 1] }, pdt: { n: 'Pommes de terre cuites', m: [85, 2, 18, 0.1] }, patate: { n: 'Patate douce cuite', m: [90, 2, 20, 0.1] },
+  quinoa: { n: 'Quinoa cuit', m: [120, 4.4, 21, 1.9] }, lentilles: { n: 'Lentilles cuites', m: [115, 9, 20, 0.4] },
+  poulet: { n: 'Blanc de poulet cuit', m: [165, 31, 0, 3.6] }, thon: { n: 'Thon au naturel', m: [110, 25, 0, 1] }, oeufs: { n: 'Œufs', m: [143, 12.6, 0.7, 9.5], u: ['œuf', 'œufs', 55] },
+  skyr: { n: 'Skyr nature', m: [63, 11, 4, 0.2] }, fb: { n: 'Fromage blanc 0 %', m: [45, 8, 4, 0.2] }, saumon: { n: 'Saumon cuit', m: [200, 22, 0, 12] },
+  boeuf: { n: 'Bœuf haché 5 % cuit', m: [160, 26, 0, 6] }, tofu: { n: 'Tofu ferme', m: [120, 13, 2, 7] }, jambon: { n: 'Jambon blanc', m: [110, 20, 1, 3] },
+  whey: { n: 'Protéine en poudre (whey)', m: [400, 80, 8, 6], u: ['dose de 30 g', 'doses de 30 g', 30] },
+  huile: { n: 'Huile d\'olive', m: [900, 0, 0, 100] }, amandes: { n: 'Amandes', m: [600, 21, 7, 52] }, cacahuete: { n: 'Beurre de cacahuète', m: [600, 25, 12, 50] }, avocat: { n: 'Avocat', m: [160, 2, 9, 15] },
+  banane: { n: 'Banane', m: [90, 1, 20, 0.3], u: ['banane', 'bananes', 120] }, pomme: { n: 'Pomme', m: [55, 0.3, 12, 0.2], u: ['pomme', 'pommes', 150] }, rouges: { n: 'Fruits rouges', m: [45, 1, 9, 0.3] },
+  legumes: { n: 'Légumes verts cuits', m: [30, 2.5, 4, 0.3] }, salade: { n: 'Salade et crudités', m: [15, 1.2, 2, 0.2] }, lait: { n: 'Lait demi-écrémé (ml)', m: [46, 3.3, 4.8, 1.6] }
+};
+/* modèle de repas : p = protéine, c = glucides, f = lipides (ajustés), x = quantités fixes en g */
+var MEALS = {
+  pdj: [
+    { t: 'Porridge protéiné', p: 'skyr', c: 'avoine', f: 'amandes', x: { banane: 120 } },
+    { t: 'Œufs et pain complet', p: 'oeufs', c: 'pain', f: 'avocat', x: { rouges: 100 } },
+    { t: 'Fromage blanc, flocons et fruit', p: 'fb', c: 'avoine', f: 'cacahuete', x: { pomme: 150 } }
+  ],
+  dej: [
+    { t: 'Poulet, riz et légumes', p: 'poulet', c: 'riz', f: 'huile', x: { legumes: 200 } },
+    { t: 'Saumon, pommes de terre et salade', p: 'saumon', c: 'pdt', x: { salade: 100 } },
+    { t: 'Bœuf haché, pâtes et légumes', p: 'boeuf', c: 'pates', f: 'huile', x: { legumes: 200 } },
+    { t: 'Tofu, quinoa et légumes (végétarien)', p: 'tofu', c: 'quinoa', f: 'huile', x: { legumes: 200 } }
+  ],
+  col: [
+    { t: 'Skyr et banane', p: 'skyr', c: 'banane', x: {} },
+    { t: 'Thon et pain complet', p: 'thon', c: 'pain', x: { salade: 80 } },
+    { t: 'Shaker de whey et banane', p: 'whey', c: 'banane', x: {} },
+    { t: 'Jambon, pain et fruit', p: 'jambon', c: 'pain', x: { pomme: 150 } }
+  ],
+  din: [
+    { t: 'Poulet, patate douce et légumes', p: 'poulet', c: 'patate', f: 'huile', x: { legumes: 200 } },
+    { t: 'Omelette, pommes de terre et salade', p: 'oeufs', c: 'pdt', x: { salade: 100 } },
+    { t: 'Thon, riz et légumes', p: 'thon', c: 'riz', f: 'huile', x: { legumes: 200 } },
+    { t: 'Lentilles, œufs et légumes (végétarien)', p: 'oeufs', c: 'lentilles', x: { legumes: 200 } }
+  ]
+};
+function mealOf(tpl, tg) {
+  var g = {}, add = function (k, q) { g[k] = (g[k] || 0) + q; }, mac = function (k, q, i) { return FOOD[k].m[i] * q / 100; };
+  Object.keys(tpl.x || {}).forEach(function (k) { add(k, tpl.x[k]); });
+  var fx = function (i) { return Object.keys(g).reduce(function (t, k) { return t + mac(k, g[k], i); }, 0); };
+  var gp = 0, gc = 0, gf = 0, it;
+  for (it = 0; it < 6; it++) {
+    gc = Math.max(0, (tg.C - fx(2) - mac(tpl.p, gp, 2) - (tpl.f ? mac(tpl.f, gf, 2) : 0)) / FOOD[tpl.c].m[2] * 100);
+    gp = Math.max(0, (tg.P - fx(1) - mac(tpl.c, gc, 1) - (tpl.f ? mac(tpl.f, gf, 1) : 0)) / FOOD[tpl.p].m[1] * 100);
+    if (tpl.f) gf = Math.max(0, (tg.F - fx(3) - mac(tpl.p, gp, 3) - mac(tpl.c, gc, 3)) / FOOD[tpl.f].m[3] * 100);
+  }
+  var out = [];
+  var put = function (k, q) {
+    var f = FOOD[k], u = f.u, qq = u ? Math.max(1, Math.round(q / u[2])) * u[2] : Math.round(q / 5) * 5;
+    if (qq <= 0) return;
+    g[k] = qq; out.push({ k: k, n: f.n, q: qq, txt: u ? Math.round(qq / u[2]) + ' ' + (Math.round(qq / u[2]) > 1 ? u[1] : u[0]) + (u[2] === 55 || u[2] === 120 || u[2] === 150 ? '' : '') : qq + (k === 'lait' ? ' ml' : ' g') });
+  };
+  var fixed = JSON.parse(JSON.stringify(tpl.x || {}));
+  g = {}; put(tpl.p, gp); put(tpl.c, gc); if (tpl.f) put(tpl.f, gf);
+  Object.keys(fixed).forEach(function (k) { put(k, fixed[k]); });
+  var tot = [0, 0, 0, 0]; out.forEach(function (o) { for (var i = 0; i < 4; i++) tot[i] += FOOD[o.k].m[i] * o.q / 100; });
+  return { t: tpl.t, items: out, kcal: Math.round(tot[0] / 5) * 5, P: Math.round(tot[1]), C: Math.round(tot[2]), F: Math.round(tot[3]) };
+}
+/* type de jour : 'heavy' (séance de gros muscles), 'light' (autre séance), 'rest' */
+function nutrition(p, dayType, variants) {
+  var e = estimate(p), young = p.age < 18;
+  var base = young ? e.tdee : e.kcal, f = dayType === 'heavy' ? 1.08 : dayType === 'light' ? 1.03 : 0.93;
+  var kcal = Math.round(base * f / 50) * 50, P = e.protein;
+  var F = Math.round(Math.max(0.8 * p.w, 0.25 * kcal / 9)), Cg = Math.max(0, Math.round((kcal - 4 * P - 9 * F) / 4));
+  var train = dayType !== 'rest';
+  var shares = train ? { pdj: 0.25, dej: 0.28, col: 0.2, din: 0.27 } : { pdj: 0.27, dej: 0.33, col: 0.12, din: 0.28 };
+  var cshare = train ? { pdj: 0.25, dej: 0.27, col: 0.23, din: 0.25 } : { pdj: 0.27, dej: 0.32, col: 0.12, din: 0.29 };
+  var pshare = { pdj: 0.25, dej: 0.3, col: 0.15, din: 0.3 };
+  var labels = { pdj: 'Petit-déjeuner', dej: 'Déjeuner', col: train ? 'Collation ou après la séance' : 'Collation', din: 'Dîner' };
+  variants = variants || {};
+  var meals = ['pdj', 'dej', 'col', 'din'].map(function (k) {
+    var list = MEALS[k], tpl = list[(variants[k] || 0) % list.length];
+    var tg = { P: P * pshare[k], C: Cg * cshare[k], F: F * shares[k] };
+    var m = mealOf(tpl, tg); m.key = k; m.label = labels[k]; m.count = list.length; return m;
+  });
+  var tot = meals.reduce(function (t, m) { return { kcal: t.kcal + m.kcal, P: t.P + m.P, C: t.C + m.C, F: t.F + m.F }; }, { kcal: 0, P: 0, C: 0, F: 0 });
+  return {
+    dayType: dayType, kcal: kcal, P: P, C: Cg, F: F, meals: meals, total: tot, young: young,
+    water: Math.round((33 * p.w + (train ? 500 : 0)) / 100) / 10,
+    post: { P: Math.round(0.35 * p.w), C: [Math.round(0.5 * p.w), Math.round(1 * p.w)] }
+  };
+}
+
 /* ---------- recommandation ---------- */
 function incFor(X, now) {
   var ws = {};
@@ -801,7 +912,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, weekPlan: weekPlan, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -1441,6 +1552,7 @@ var TABS = [
   ['seance', 'Séance', '<path d="M3 12h18M6.5 8v8M17.5 8v8M10 6v12M14 6v12"/>'],
   ['progres', 'Progrès', '<path d="M3 17l5-5 4 3 8-9M15 6h5v5"/>'],
   ['exos', 'Exos', '<path d="M4 6h16M4 12h16M4 18h10"/>'],
+  ['repas', 'Repas', '<path d="M7 3v8a2 2 0 002 2v8M11 3v8a2 2 0 01-2 2M17 3c-2 2-2.5 5-2.5 8H17v10"/>'],
   ['data', 'Données', '<path d="M12 4v10M8 10l4 4 4-4M5 19h14"/>']
 ];
 var seedCSV = $('seed').textContent, model, S = { fresh: false, onb: null, pf: {}, pfErr: null, home: true, tab: 'seance', sel: null, done: {}, open: null, range: 180, q: '', mf: 'Tous', msg: null, fiche: null, sf: null, xk: null, hs: null, hn: 10, wf: null, xtra: [] };
@@ -1716,6 +1828,49 @@ function evCard() {
   }
   return h + (hasData() ? '<div><button class="btn" data-act="evopen">Un imprévu cette semaine ?</button></div>' : '');
 }
+
+/* ---------- programme de la semaine ---------- */
+function planCard() {
+  var p = prof(); if (!p || !hasData()) return '';
+  var plan = C.weekPlan(p, { avoid: injured() }), w = C.weekly(model, now(), 1), nS = w[w.length - 1] ? w[w.length - 1].sessions : 0, nxt = nS % plan.length;
+  return '<section class="sec"><div><h2>Programme de la semaine</h2><p class="sub">' + plan.length + ' séances types pour ta fréquence (' + esc(freqInfo()[1]) + '), dans l\'ordre. La suite conseillée est mise en avant, d\'après ce que tu as déjà fait cette semaine.</p></div>' +
+    '<div class="plan">' + plan.map(function (d, i) {
+      var done = i < nS && nS < plan.length, next = i === nxt;
+      return '<div class="pday' + (next ? ' next' : '') + '"><div class="pn">' + (i + 1) + '</div><div class="pm"><b>' + esc(d[0]) + '</b>' + (d.length > 1 ? ' + ' + d.slice(1).map(esc).join(', ') : '') + '</div>' +
+        (done ? '<span class="pill">Fait</span>' : '<button class="chip' + (next ? ' go' : '') + '" data-act="plansel" data-i="' + i + '">' + (next ? 'Proposée' : 'Choisir') + '</button>') + '</div>';
+    }).join('') + '</div></section>';
+}
+/* ---------- alimentation ---------- */
+function dayTypeAuto() {
+  if (!S.sel || !S.sel.length) return 'rest';
+  return S.sel.some(function (m) { return ['Quadriceps', 'Ischios', 'Fessiers', 'Dos'].indexOf(m) >= 0; }) ? 'heavy' : 'light';
+}
+function viewRepas() {
+  var p = prof();
+  if (!p) return '<section class="sec"><div><h2>Alimentation</h2><p class="sub">Pour calculer tes calories et tes repas, j\'ai besoin de ton âge, de ton gabarit et de ton objectif.</p></div><button class="btn primary" data-act="editprofile">Compléter mon profil</button></section>';
+  var dt = S.nd || dayTypeAuto(), n = C.nutrition(p, dt, S.mv || {});
+  var g = C.GOALS.filter(function (x) { return x[0] === p.goal; })[0][1];
+  var DT = [['heavy', 'Séance lourde'], ['light', 'Séance légère'], ['rest', 'Repos']];
+  var nf = function (x) { return x.toLocaleString('fr-FR'); };
+  var h = '<section class="sec"><div><h2>Alimentation</h2><p class="sub">' + esc(g) + '. ' + (S.sel && S.sel.length ? 'Séance choisie : ' + S.sel.map(esc).join(' + ') + '.' : 'Aucune séance choisie : jour de repos par défaut.') + '</p></div>' +
+    '<div class="chips">' + DT.map(function (d) { return '<button class="chip' + (dt === d[0] ? ' go' : '') + '" data-act="nd" data-v="' + d[0] + '" aria-pressed="' + (dt === d[0]) + '">' + d[1] + '</button>'; }).join('') + '</div>' +
+    '<div class="est"><div class="stat"><b>' + nf(n.kcal) + '</b><span>kcal</span></div><div class="stat"><b>' + n.P + ' g</b><span>protéines</span></div><div class="stat"><b>' + n.C + ' g</b><span>glucides</span></div><div class="stat"><b>' + n.F + ' g</b><span>lipides</span></div></div>' +
+    '<p class="legend">' + (dt === 'rest' ? 'Jour de repos : un peu moins de glucides, les protéines restent identiques.' : dt === 'heavy' ? 'Séance lourde : plus de glucides pour l\'énergie et la récupération.' : 'Séance légère : un petit supplément de glucides.') + (n.young ? ' À ton âge, je n\'applique aucun déficit calorique : parles-en à un professionnel.' : '') + '</p></section>';
+  h += '<section class="sec"><div><h2>Tes repas</h2><p class="sub">Quantités calculées pour tes objectifs du jour. Touche « Autre idée » pour changer de menu.</p></div>' + n.meals.map(function (m) {
+    return '<article class="card"><div class="row"><div><div class="lab">' + esc(m.label) + '</div><div class="ename">' + esc(m.t) + '</div></div><button class="btn" data-act="mv" data-k="' + m.key + '">Autre idée</button></div>' +
+      '<ul class="how">' + m.items.map(function (i) { return '<li>' + esc(i.txt) + (i.txt.indexOf(i.n.toLowerCase()) >= 0 || /banane|pomme|œuf|dose/.test(i.txt) ? '' : ' ' + esc(i.n.toLowerCase().replace(/ \(ml\)$/, ''))) + '</li>'; }).join('') + '</ul>' +
+      '<div class="meth"><span><b>' + m.kcal + '</b> kcal</span><span>P <b>' + m.P + '</b> g</span><span>G <b>' + m.C + '</b> g</span><span>L <b>' + m.F + '</b> g</span></div></article>';
+  }).join('') + '<p class="legend">Total des menus : ' + nf(n.total.kcal) + ' kcal, ' + n.total.P + ' g de protéines, ' + n.total.C + ' g de glucides, ' + n.total.F + ' g de lipides. Poids des féculents et viandes : cuits.</p></section>';
+  h += '<section class="sec"><div class="card tipcard"><div class="lab">Autour de la séance</div><ul>' +
+    '<li>Après la séance, dans les 2 heures : environ ' + n.post.P + ' g de protéines et ' + n.post.C[0] + ' à ' + n.post.C[1] + ' g de glucides. Il n\'y a pas de « fenêtre de 30 minutes » : l\'important est le total de la journée.</li>' +
+    '<li>Avant la séance, 1 à 2 h avant : un repas ou une collation avec des glucides et peu de graisses.</li>' +
+    '<li>Eau : environ ' + String(n.water).replace('.', ',') + ' L par jour, un peu plus s\'il fait chaud ou si tu transpires beaucoup.</li>' +
+    '<li>Sommeil : 7 à 9 h par nuit, c\'est là que tu récupères et que tu progresses.</li>' +
+    (p.goal === 'perte' ? '<li>En perte de poids, vise une baisse lente, d\'environ 0,25 à 0,75 kg par semaine. Les protéines et les séances de force protègent ta masse musculaire.</li>' : p.goal === 'muscle' ? '<li>En prise de muscle, vise une prise lente, d\'environ 0,25 à 0,5 kg par semaine. Si le poids monte plus vite, baisse un peu les glucides.</li>' : '<li>Pour entretenir, garde un poids stable et ajuste de 100 à 200 kcal si la balance bouge pendant 2 à 3 semaines.</li>') +
+    '<li>Pèse-toi 2 à 3 matins par semaine, à jeun, et regarde la moyenne : le poids varie d\'un jour à l\'autre.</li></ul></div></section>';
+  h += '<p class="legend">Ce sont des estimations générales, pas un avis médical ni un régime personnalisé. Si tu as une allergie ou une intolérance, une maladie (diabète, reins, troubles alimentaires...) ou si tu es enceinte, demande l\'avis d\'un médecin ou d\'un diététicien avant de suivre ces repères. La créatine, si tu t\'y intéresses, est l\'un des compléments les mieux étudiés, mais c\'est un choix à discuter avec un professionnel.</p>';
+  return h;
+}
 function deloadOn() { try { var t = parseInt(localStorage.getItem('cds.deload') || '0', 10); return t && Date.now() - t < 7 * 864e5; } catch (e) { return false; } }
 function ropts() {
   var ev = activeEvent(), r = ev && ev.r;
@@ -1751,7 +1906,7 @@ function viewSeance() {
   }).join('');
   var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche jusqu\'à trois muscles : le premier est le muscle principal, les suivants le complètent. Le point indique la récupération : vert, plus de 48 h.</p></div>' +
     '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + tiles + '</section>';
-  h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + evCard() + h;
+  h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + evCard() + planCard() + h;
   h += companionsSection(byM);
   autoXtra();
   if (!S.sel.length) return h + '<p class="empty">Choisis un muscle pour obtenir ta séance.</p>';
@@ -1923,7 +2078,7 @@ function render() {
   $('meta').textContent = metaText();
   if (S.active) { $('meta').setAttribute('data-act', 'tab'); $('meta').setAttribute('data-t', 'seance'); } else { $('meta').removeAttribute('data-act'); $('meta').removeAttribute('data-t'); }
   $('tabs').innerHTML = TABS.map(function (t) { return '<button data-act="tab" data-t="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true">' + t[2] + '</svg>' + t[1] + '</button>'; }).join('');
-  var v = S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : viewData();
+  var v = S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : viewData();
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
   Anim.mount();
@@ -2058,6 +2213,9 @@ document.addEventListener('click', function (e) {
   else if (a === 'evm') { saveEvent('blessure', b.dataset.m || null); }
   else if (a === 'evskip') { var ew = pendingWeek(), eva = readEvents(); eva.push({ t: Date.now(), wk: ew ? ew.w.t : null, r: 'ignore' }); writeEvents(eva); }
   else if (a === 'evoff') { var evb = readEvents(); evb.push({ t: Date.now(), r: 'ignore', off: true }); writeEvents(evb); S.evwarn = null; S.done = {}; S.xtra = []; S.xk = null; }
+  else if (a === 'nd') { S.nd = b.dataset.v; }
+  else if (a === 'mv') { S.mv = S.mv || {}; S.mv[k] = (S.mv[k] || 0) + 1; }
+  else if (a === 'plansel') { var pl = C.weekPlan(prof(), { avoid: injured() }); S.sel = pl[wi].slice(); S.done = {}; S.xtra = []; S.xk = null; S.evwarn = null; window.scrollTo(0, 0); }
   else if (a === 'focus') { var fi = S.sel.indexOf(m); if (fi > 0) { S.sel.splice(fi, 1); S.sel.unshift(m); } S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'swap') { S.sel = [m]; S.done = {}; S.xtra = []; S.xk = null; }
   else if (a === 'preset') { S.sel = C.PRESETS[wi][1].slice(); S.done = {}; S.xtra = []; S.xk = null; }
