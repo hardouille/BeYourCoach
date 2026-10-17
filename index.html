@@ -3315,11 +3315,13 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
+var APP_VER = 'v0.50';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
     '<h1>Bienvenue dans <span class="gtext">BeYourCoach</span></h1>' +
     '<p class="tag">Chaque séance compte. BeYourCoach s\'en souvient pour te faire progresser.</p>' +
+    '<p class="legend" style="margin-top:-6px">' + APP_VER + ' · bêta</p>' +
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
     '<div class="acts">' +
     (d ? '<button class="btn primary big" data-act="enter">Continuer avec mon historique</button><p class="sub">' + model.sessions.length + ' séances · dernière ' + C.rel(model.last, now()) + '</p>' : '') +
@@ -3332,6 +3334,7 @@ function viewHome() {
 }
 function legalCard() {
   return '<section class="sec"><div class="lab">Informations importantes</div>' +
+    '<div class="legend">BeYourCoach ' + APP_VER + ' · bêta</div>' +
     '<details class="lg"><summary>Avertissement santé</summary><p class="why">BeYourCoach donne des informations générales sur l\'entraînement et l\'alimentation. Ce n\'est pas un avis médical et cela ne remplace ni un médecin ni un coach diplômé. Demande l\'avis d\'un médecin avant de commencer ou de reprendre le sport, surtout en cas de problème de santé, de blessure, de grossesse ou de traitement. Arrête l\'exercice en cas de douleur, de vertige ou de gêne respiratoire. Les charges proposées sont des points de départ à adapter. Les conseils alimentaires sont indicatifs. Les moins de 18 ans doivent s\'entraîner avec l\'accord et l\'aide d\'un adulte.</p></details>' +
     '<details class="lg"><summary>Confidentialité</summary><p class="why">Il n\'y a ni compte, ni publicité, ni suivi. Ton profil, tes séances, ton poids et tes réglages restent uniquement dans ce navigateur, sur cet appareil. Ils ne sont envoyés nulle part. Tu peux tout effacer avec « Effacer mes données » ou en vidant les données du site dans ton navigateur.</p><p class="why">Deux éléments contactent des services extérieurs : l\'hébergeur de l\'application (GitHub), qui voit ton adresse IP quand tu ouvres l\'app, et YouTube (Google). Les miniatures des vidéos se chargent depuis YouTube quand tu ouvres une fiche, et le lecteur YouTube se charge quand tu touches une vidéo. Google peut alors recevoir des informations techniques comme ton adresse IP. Sans connexion, les vidéos ne s\'affichent pas.</p></details>' +
     '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les animations 3D en boucle viennent de Vital Animations (licence commerciale). Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
