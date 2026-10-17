@@ -1007,7 +1007,7 @@ function rank(name, kind, lv) {
   if (/\(barre\)|barre EZ/i.test(name)) r += 20; else if (/haltère/i.test(name)) r += 10; else if (/\(machine\)|poulie/i.test(name)) r += 2;
   return r;
 }
-function quota(n, i, mx) { mx = mx || MAX_EX; if (mx <= 4) return n <= 1 ? 4 : n === 2 ? [3, 1][i] : [2, 1, 1][i] || 0; return n <= 1 ? 6 : n === 2 ? [4, 2][i] : [3, 2, 1][i] || 0; }
+function quota(n, i, mx) { mx = mx || MAX_EX; if (mx <= 3) return n <= 1 ? 3 : n === 2 ? [2, 1][i] : [1, 1, 1][i] || 0; if (mx === 5) return n <= 1 ? 5 : n === 2 ? [3, 2][i] : [2, 2, 1][i] || 0; if (mx <= 4) return n <= 1 ? 4 : n === 2 ? [3, 1][i] : [2, 1, 1][i] || 0; return n <= 1 ? 6 : n === 2 ? [4, 2][i] : [3, 2, 1][i] || 0; }
 function slotKind(i) { return ['C', 'I', 'C', 'I', 'I', 'I'][i] || 'I'; }
 function recommend(model, muscles, now, opts) {
   opts = opts || {};
@@ -1052,6 +1052,7 @@ function recommend(model, muscles, now, opts) {
       it.sets -= 1; it.vnote = 'Tu fais déjà ' + Math.round(stt.avg4) + ' séries / semaine sur ' + it.muscle + ' (au-delà de ' + vol[1] + ') : une série de moins pour bien récupérer.';
     }
     if (opts.level === 'debutant') it.sets = Math.min(it.sets, 3);
+    if (opts.short && opts.short <= 45) it.sets = Math.min(it.sets, 3);
     method(it, opts.goal, { level: opts.level, easy: opts.easy, deload: opts.deload, finisher: isMain && lastIso[it.muscle] === i && model.sessions.length >= 30 });
   });
   var first = items.filter(function (x) { return x.kind === 'C' && !x.bw && x.w >= 20; })[0];
@@ -2505,7 +2506,14 @@ function scrollChat() { setTimeout(function () { var c = document.querySelector(
 function deloadOn() { try { var t = parseInt(localStorage.getItem('cds.deload') || '0', 10); return t && Date.now() - t < 7 * 864e5; } catch (e) { return false; } }
 function ropts() {
   var ev = activeEvent(), r = ev && ev.r;
-  return { level: LV(), goal: PROFILE && !PROFILE.skip ? PROFILE.goal : null, deload: deloadOn() || r === 'maladie' || r === 'voyage', maxEx: r === 'temps' || r === 'motivation' ? 4 : 0, easy: r === 'fatigue' || r === 'blessure' || r === 'autre' };
+  return { level: LV(), goal: PROFILE && !PROFILE.skip ? PROFILE.goal : null, deload: deloadOn() || r === 'maladie' || r === 'voyage', maxEx: (function (a, b) { return a && b ? Math.min(a, b) : a || b; })(r === 'temps' || r === 'motivation' ? 4 : 0, S.dur === 30 ? 3 : S.dur === 45 ? 4 : S.dur === 60 ? 5 : 0), short: S.dur || 0, easy: r === 'fatigue' || r === 'blessure' || r === 'autre' };
+}
+function durChips() {
+  return '<div class="chips"><span class="legend" style="align-self:center;margin:0">Temps dispo</span>' + [[0, 'Libre'], [30, '30 min'], [45, '45 min'], [60, '1 h']].map(function (d) { return '<button class="chip' + ((S.dur || 0) === d[0] ? ' go' : '') + '" data-act="dur" data-k="' + d[0] + '" aria-pressed="' + ((S.dur || 0) === d[0]) + '">' + d[1] + '</button>'; }).join('') + '</div>';
+}
+function estMin(items) {
+  var t = 4; items.forEach(function (it) { var r = it.rest ? (it.rest[0] + it.rest[1]) / 2 : 90; t += it.sets * (r + 40) / 60; });
+  return Math.round(t / 5) * 5;
 }
 function deloadCard() {
   if (deloadOn()) return '<div class="msg tip"><div class="lab">Semaine allégée en cours</div><p class="why">Moins de séries, charges −10 %, rien de difficile. Tu reviens à ton rythme normal ensuite.</p><button class="btn" data-act="deload" data-v="0">Revenir au programme normal</button></div>';
@@ -2668,18 +2676,18 @@ function viewSeance() {
     '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + fold('tl', 'Choisir dans la liste', tiles) + '</section>';
   var evBusy = activeEvent() || pendingWeek() || S.evq || S.evwarn, mo = S.open && S.open.more;
   var rq = ROUT.length ? '<div class="chips"><span class="legend" style="align-self:center;margin:0">Mes routines</span>' + ROUT.map(function (r) { return '<button class="chip go" data-act="rbstart" data-k="' + esc(r.id) + '">' + esc(r.name) + '</button>'; }).join('') + '</div>' : '';
-  h = '<div class="row" style="justify-content:space-between"><button class="btn back" data-act="home">← Accueil</button><button class="chip" data-act="fold" data-k="more" aria-expanded="' + !!mo + '">Plus ' + (mo ? '▴' : '▾') + '</button></div>' + (evBusy ? evCard() : '') + weekCard() + rq + (mo ? (evBusy ? '' : evCard()) + planCard() + routinesCard() : '') + h;
+  h = '<div class="row" style="justify-content:space-between"><button class="btn back" data-act="home">← Accueil</button><button class="chip" data-act="fold" data-k="more" aria-expanded="' + !!mo + '">Plus ' + (mo ? '▴' : '▾') + '</button></div>' + (evBusy ? evCard() : '') + weekCard() + deloadCard() + rq + fold('prog', 'Programmes prêts', programsCard()) + durChips() + (mo ? (evBusy ? '' : evCard()) + planCard() + routinesCard() : '') + h;
   h += fold('comp', 'Muscles à associer', companionsSection(byM));
   autoXtra();
   if (!S.sel.length) return h + '<p class="empty">Choisis un muscle pour obtenir ta séance.</p>';
-  h += deloadCard() + focusCard();
+  h += focusCard();
   var rec = C.recommend(model, SEL(), n, ropts());
   if (rec.warnings.length) {
     var crit = rec.warnings.some(function (w) { return w.hours < 24; });
     h += '<div class="banner' + (crit ? ' crit' : '') + '">' + rec.warnings.map(function (w) { return '<span>' + esc(w.text) + '</span>'; }).join('') +
       (rec.rested.length ? '<span class="chips">' + rec.rested.slice(0, 3).map(function (s) { return '<button class="chip go" data-act="swap" data-m="' + s.muscle + '">' + s.muscle + ' · ' + esc(s.label) + '</button>'; }).join('') + '</span>' : '') + '</div>';
   }
-  if (rec.items.length) h += '<section class="sec"><div><h2>Ta séance</h2><p class="sub">' + rec.items.length + ' exercice' + (rec.items.length > 1 ? 's' : '') + ', les plus lourds d\'abord.</p></div>';
+  if (rec.items.length) h += '<section class="sec"><div><h2>Ta séance</h2><p class="sub">' + rec.items.length + ' exercice' + (rec.items.length > 1 ? 's' : '') + ', les plus lourds d\'abord. Environ ' + estMin(rec.items) + ' min.</p></div>';
   h += rec.items.map(function (it, i) {
     var key = it.name, dn = !!S.done[key];
     var tgt = it.bw ? '<b>' + it.sets + ' × ' + it.reps + '</b><small>reps' + (it.w > 0 ? ' · +' + kg(it.w) + ' kg' : '') + '</small>' : '<b>' + it.sets + ' × ' + it.reps + '</b><span>' + kg(it.w) + ' kg</span>';
@@ -3522,7 +3530,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.65';
+var APP_VER = 'v0.66';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3675,6 +3683,29 @@ function altsFor(i) {
 var ROUT = readJ('cds.routines', []); if (!Array.isArray(ROUT)) ROUT = [];
 function saveRout() { lsSet('cds.routines', JSON.stringify(ROUT.slice(0, 30))); }
 function findRout(id) { return ROUT.filter(function (r) { return r.id === id; })[0]; }
+var PROGRAMS = [
+  { id: 'ppl', name: 'Push / Pull / Legs', short: 'PPL', sub: '3 à 6 séances par semaine : poussée, tirage, jambes.', days: [
+    { name: 'Push', exos: [['Développé couché (barre)', 4], ['Développé incliné (haltères)', 3], ['Développé militaire (haltères)', 3], ['Élévation latérale (haltères)', 3], ['Extension triceps corde', 3]] },
+    { name: 'Pull', exos: [['Tractions', 4], ['Rowing barre penché', 3], ['Tirage poitrine (poulie)', 3], ['Oiseau (haltères)', 3], ['Curl barre EZ', 3], ['Curl marteau (haltères)', 2]] },
+    { name: 'Legs', exos: [['Squat (barre)', 4], ['Soulevé de terre roumain (barre)', 3], ['Presse à cuisses', 3], ['Leg curl allongé (machine)', 3], ['Mollets debout (machine)', 4], ['Relevé de jambes suspendu', 3]] }] },
+  { id: 'fb', name: 'Full body', short: 'Full body', sub: '3 séances par semaine, tout le corps à chaque fois.', days: [
+    { name: 'Full body A', exos: [['Squat (barre)', 3], ['Développé couché (barre)', 3], ['Rowing haltère', 3], ['Élévation latérale (haltères)', 2], ['Curl haltères', 2], ['Planche (gainage)', 2]] },
+    { name: 'Full body B', exos: [['Soulevé de terre roumain (barre)', 3], ['Développé militaire (haltères)', 3], ['Tractions', 3], ['Développé incliné (haltères)', 2], ['Extension triceps corde', 2], ['Mollets debout (machine)', 3]] },
+    { name: 'Full body C', exos: [['Presse à cuisses', 3], ['Développé incliné (haltères)', 3], ['Tirage poitrine (poulie)', 3], ['Hip thrust (barre)', 3], ['Curl marteau (haltères)', 2], ['Extension triceps (poulie)', 2]] }] },
+  { id: 'ul', name: 'Haut / Bas', short: 'Haut-Bas', sub: '4 séances par semaine : haut du corps, puis bas.', days: [
+    { name: 'Haut A', exos: [['Développé couché (barre)', 4], ['Rowing barre penché', 4], ['Développé militaire (haltères)', 3], ['Tirage poitrine (poulie)', 3], ['Curl barre EZ', 3], ['Extension triceps corde', 3]] },
+    { name: 'Bas A', exos: [['Squat (barre)', 4], ['Soulevé de terre roumain (barre)', 3], ['Presse à cuisses', 3], ['Leg curl allongé (machine)', 3], ['Mollets debout (machine)', 4], ['Crunch', 3]] },
+    { name: 'Haut B', exos: [['Développé incliné (haltères)', 4], ['Tractions', 4], ['Élévation latérale (haltères)', 3], ['Rowing poulie assis (prise en V)', 3], ['Curl marteau (haltères)', 3], ['Skullcrusher (barre)', 3]] },
+    { name: 'Bas B', exos: [['Hip thrust (barre)', 4], ['Split squat bulgare', 3], ['Leg curl assis (machine)', 3], ['Leg extension', 3], ['Mollets assis (machine)', 4], ['Relevé de jambes suspendu', 3]] }] }
+];
+function pgRout(pr, d) { return { name: d.name + (pr.id === 'fb' || pr.id === 'ul' ? '' : ' (' + pr.short + ')'), exos: d.exos.map(function (x) { return { name: x[0], sets: x[1], ss: false }; }) }; }
+function programsCard() {
+  return '<section class="sec"><div><h2>Programmes prêts</h2><p class="sub">Des séances toutes faites. Touche un jour pour le démarrer, ou ajoute le programme à tes routines pour le garder et le modifier.</p></div>' +
+    (S.pgmsg ? '<div class="msg' + (S.pgmsg.err ? ' err' : '') + '">' + esc(S.pgmsg.t) + '</div>' : '') +
+    PROGRAMS.map(function (pr) {
+      return '<article class="card"><div><div class="ename">' + esc(pr.name) + '</div><div class="emu">' + esc(pr.sub) + '</div></div><div class="chips">' + pr.days.map(function (d, i) { return '<button class="chip go" data-act="pgstart" data-k="' + pr.id + ':' + i + '">' + esc(d.name) + '</button>'; }).join('') + '</div><div class="chips"><button class="chip" data-act="pgadd" data-k="' + pr.id + '">Ajouter à mes routines</button></div></article>';
+    }).join('') + '</section>';
+}
 function routinesCard() {
   var h = '<section class="sec"><div><h2>Mes routines</h2><p class="sub">Tes propres séances, avec tes exercices, tes séries et tes supersets. Elles se lancent en un geste.</p></div>';
   h += ROUT.map(function (r) {
@@ -4095,6 +4126,9 @@ document.addEventListener('click', function (e) {
   }
   else if (a === 'fiche') S.fiche = S.fiche === k ? null : k;
   else if (a === 'hist') { S.hs = S.hs === k ? null : k; S.he = null; S.confirm = null; }
+  else if (a === 'dur') { S.dur = +k || null; S.done = {}; S.xtra = []; S.xk = null; }
+  else if (a === 'pgstart') { var pq = k.split(':'), pg0 = PROGRAMS.filter(function (z) { return z.id === pq[0]; })[0], pd = pg0 && pg0.days[+pq[1]]; if (pd) { startRoutine(pgRout(pg0, pd)); if (S.active) { window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); } } }
+  else if (a === 'pgadd') { var pg1 = PROGRAMS.filter(function (z) { return z.id === k; })[0], added = 0; if (pg1) { pg1.days.forEach(function (d, i) { var r0 = pgRout(pg1, d); if (!ROUT.some(function (z) { return z.name === r0.name; })) { r0.id = String(Date.now()) + '-' + i; ROUT.push(r0); added++; } }); saveRout(); S.pgmsg = { t: added ? added + ' routine' + (added > 1 ? 's ajoutées' : ' ajoutée') + ' : tu les retrouves dans « Mes routines » en haut.' : 'Ces routines sont déjà dans tes routines.' }; } }
   else if (a === 'hedit') { var hi = model.sessions.filter(function (z) { return z.id === k; })[0], li0 = hi ? logIdx(hi) : -1; if (li0 >= 0) { S.he = { id: k, idx: li0, exos: log[li0].exos.map(function (e) { return { name: e.name, sets: e.sets.map(function (x) { return { w: x.w > 0 ? x.w : 0, r: x.r }; }) }; }) }; S.confirm = null; } }
   else if (a === 'hecancel') S.he = null;
   else if (a === 'hesd') { syncHe(); if (S.he) { S.he.exos[wi].sets.splice(wj, 1); if (!S.he.exos[wi].sets.length) S.he.exos.splice(wi, 1); S.he.err = null; } }
