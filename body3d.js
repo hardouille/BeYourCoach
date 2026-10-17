@@ -1,5 +1,5 @@
 /* BeYourCoach – silhouette 3D interactive.
-   Modèle : « Anatomy study 2.0 Basemesh Human Male Body » par zeroran (Sketchfab), licence CC BY 4.0,
+   Modèles : « Anatomy study 2.0 Basemesh Human Male Body » par zeroran et « female muscle human body » par mina (Sketchfab), licence CC BY 4.0,
    simplifié pour mobile ; zones musculaires calculées d'après la position sur le corps. */
 (function () {
   var T = window.THREE;
@@ -48,7 +48,7 @@
   }
   Body.prototype.pd = function (pts) { var k = Object.keys(pts), a = pts[k[0]], b = pts[k[1]]; return Math.hypot(a.x - b.x, a.y - b.y) || 1; };
   Body.prototype.load = function (url) {
-    var self = this;
+    var self = this; this.ready = false; this.url = url;
     var b64 = /\.txt$/.test(url);
     return fetch(url).then(function (r) { return b64 ? r.text().then(function (t) { var bin = atob(t), u = new Uint8Array(bin.length), i; for (i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i); return u.buffer; }) : r.arrayBuffer(); }).then(function (buf) {
       var h = new Uint32Array(buf, 0, 2), nV = h[0], nF = h[1];
@@ -57,6 +57,7 @@
       var io = 8 + nV * 6, idx = new Uint16Array(buf, io, nF * 3), lab = new Uint8Array(buf, io + nF * 6, nV);
       var g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setIndex(new T.BufferAttribute(idx, 1)); g.computeVertexNormals();
       self.nV = nV; self.idx = idx; self.lab = lab; self.col = new Float32Array(nV * 3); g.setAttribute('color', new T.BufferAttribute(self.col, 3));
+      if (self.mesh) { self.scene.remove(self.mesh); self.geo.dispose(); }
       self.geo = g; self.mesh = new T.Mesh(g, self.mat); self.scene.add(self.mesh);
       self.soften(); self.paint(); self.ready = true; self.dirty = true;
     });

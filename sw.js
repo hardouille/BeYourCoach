@@ -1,6 +1,6 @@
 /* BeYourCoach : service worker, fonctionne hors ligne. */
-var CACHE = 'beyourcoach-v60';
-var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'vendor/three.min.js', 'body3d.js', 'body.bin'];
+var CACHE = 'beyourcoach-v61';
+var FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'vendor/three.min.js', 'body3d.js', 'body.bin', 'body_f.bin'];
 self.addEventListener('install', function (e) {
   e.waitUntil(caches.open(CACHE).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
 });

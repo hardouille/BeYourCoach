@@ -2577,9 +2577,11 @@ function silhouetteHTML(byM) {
 var BODY = { inst: null, loading: false, failed: false };
 function loadScriptOnce(src) { return new Promise(function (ok, ko) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
 function bodyStates() { var o = {}; C.MUSCLES.forEach(function (m) { o[m] = C.muscleStatus(model, m, now()).state; }); return o; }
+function bodyFile() { var p = prof(); return p && p.sex === 'F' ? 'body_f.bin' : 'body.bin'; }
 function mountBody() {
   var slot = $('bslot'); if (!slot || BODY.failed) return;
-  if (BODY.inst && BODY.inst.ready) {
+  var want = bodyFile();
+  if (BODY.inst && BODY.inst.ready && BODY.inst.url === want) {
     var cv = BODY.inst.canvas; if (cv.parentNode !== slot) { var ld = slot.querySelector('.ld'); if (ld) ld.remove(); slot.insertBefore(cv, slot.firstChild); }
     BODY.inst.resize(); BODY.inst.set(bodyStates(), S.sel.slice()); return;
   }
@@ -2588,9 +2590,11 @@ function mountBody() {
   var wgl = false; try { var tc = document.createElement('canvas'); wgl = !!(tc.getContext('webgl2') || tc.getContext('webgl')); } catch (e) {}
   if (!wgl) { BODY.failed = true; BODY.loading = false; render(); return; }
   (window.THREE ? Promise.resolve() : loadScriptOnce('vendor/three.min.js')).then(function () { return window.BYCBody ? 0 : loadScriptOnce('body3d.js'); }).then(function () {
-    var cv = document.createElement('canvas'); cv.setAttribute('aria-label', 'Corps humain en 3D : touche un muscle');
-    BODY.inst = new BYCBody.Body(cv, { onPick: function (n) { var bt = document.createElement('button'); bt.setAttribute('data-act', 'pick'); bt.setAttribute('data-m', n); bt.hidden = true; document.body.appendChild(bt); bt.click(); bt.remove(); } });
-    return BODY.inst.load('body.bin');
+    if (!BODY.inst) {
+      var cv = document.createElement('canvas'); cv.setAttribute('aria-label', 'Corps humain en 3D : touche un muscle');
+      BODY.inst = new BYCBody.Body(cv, { onPick: function (n) { var bt = document.createElement('button'); bt.setAttribute('data-act', 'pick'); bt.setAttribute('data-m', n); bt.hidden = true; document.body.appendChild(bt); bt.click(); bt.remove(); } });
+    }
+    return BODY.inst.load(want);
   }).then(function () { BODY.loading = false; mountBody(); }).catch(function () { BODY.failed = true; BODY.loading = false; render(); });
 }
 function bodyHTML(byM) {
@@ -3450,7 +3454,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.60';
+var APP_VER = 'v0.61';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3472,7 +3476,7 @@ function legalCard() {
     '<div class="legend">BeYourCoach ' + APP_VER + ' · bêta</div><div class="row"><button class="btn" data-act="upd">Vérifier les mises à jour</button></div>' +
     '<details class="lg"><summary>Avertissement santé</summary><p class="why">BeYourCoach donne des informations générales sur l\'entraînement et l\'alimentation. Ce n\'est pas un avis médical et cela ne remplace ni un médecin ni un coach diplômé. Demande l\'avis d\'un médecin avant de commencer ou de reprendre le sport, surtout en cas de problème de santé, de blessure, de grossesse ou de traitement. Arrête l\'exercice en cas de douleur, de vertige ou de gêne respiratoire. Les charges proposées sont des points de départ à adapter. Les conseils alimentaires sont indicatifs. Les moins de 18 ans doivent s\'entraîner avec l\'accord et l\'aide d\'un adulte.</p></details>' +
     '<details class="lg"><summary>Confidentialité</summary><p class="why">Il n\'y a ni compte, ni publicité, ni suivi. Ton profil, tes séances, ton poids et tes réglages restent uniquement dans ce navigateur, sur cet appareil. Ils ne sont envoyés nulle part. Tu peux tout effacer avec « Effacer mes données » ou en vidant les données du site dans ton navigateur.</p><p class="why">Deux éléments contactent des services extérieurs : l\'hébergeur de l\'application (GitHub), qui voit ton adresse IP quand tu ouvres l\'app, et YouTube (Google). Les miniatures des vidéos se chargent depuis YouTube quand tu ouvres une fiche, et le lecteur YouTube se charge quand tu touches une vidéo. Google peut alors recevoir des informations techniques comme ton adresse IP. Sans connexion, les vidéos ne s\'affichent pas.</p></details>' +
-    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les animations 3D en boucle viennent de Vital Animations (licence commerciale). Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Le corps 3D de l\'onglet Séance est « Anatomy study 2.0 Basemesh Human Male Body » par zeroran (Sketchfab, licence CC BY 4.0), simplifié pour mobile. Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
+    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les animations 3D en boucle viennent de Vital Animations (licence commerciale). Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Le corps 3D de l\'onglet Séance est « Anatomy study 2.0 Basemesh Human Male Body » par zeroran et « female muscle human body » par mina (Sketchfab, licence CC BY 4.0), simplifiés pour mobile. Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
     '</section>';
 }
 function viewData() {
