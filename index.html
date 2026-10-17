@@ -3203,8 +3203,9 @@ function ficheHTML(name) {
   var front = (Anim.patterns[e.p] || {}).v === 'front';
   var ph = window.PHOTOS && PHOTOS[name];
   var phHTML = ph ? '<div class="ph"><img src="img/' + ph + '-0.jpg" alt="" class="phi a" loading="lazy"><img src="img/' + ph + '-1.jpg" alt="Position de fin de mouvement" class="phi b" loading="lazy"></div>' : '';
-  return '<div class="fiche">' + vitalHTML(name) + sketchHTML(name) + videoHTML(name) + '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
-    '<p class="legend">' + (ph ? 'Photos : début puis fin du mouvement (free-exercise-db, domaine public). Le geste exact peut varier selon la machine.' : (front ? 'Vue de face.' : 'Vue de profil.') + ' La couleur montre ce qui travaille. Dessin schématique.') + '</p>' +
+  var media = vitalHTML(name) || sketchHTML(name) || videoHTML(name);
+  return '<div class="fiche">' + media + (media ? '' : '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
+    '<p class="legend">' + (ph ? 'Photos : début puis fin du mouvement (free-exercise-db, domaine public). Le geste exact peut varier selon la machine.' : (front ? 'Vue de face.' : 'Vue de profil.') + ' La couleur montre ce qui travaille. Dessin schématique.') + '</p>') +
     '<div class="lab">Muscles</div><p class="why"><b>' + e.m + '</b>' + (e.sec ? ' · secondaires : ' + esc(e.sec) : '') + '</p>' +
     '<div class="lab">Matériel</div><p class="why">' + esc(e.eq) + '</p>' +
     '<div class="lab">Exécution</div><ol class="how">' + e.st.map(li).join('') + '</ol>' +
