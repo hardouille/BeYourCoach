@@ -2460,7 +2460,7 @@ function ropts() {
 function deloadCard() {
   if (deloadOn()) return '<div class="msg tip"><div class="lab">Semaine allégée en cours</div><p class="why">Moins de séries, charges −10 %, rien de difficile. Tu reviens à ton rythme normal ensuite.</p><button class="btn" data-act="deload" data-v="0">Revenir au programme normal</button></div>';
   var d = C.needsDeload(model, now()); if (!d.suggest || !hasData()) return '';
-  return '<div class="banner"><span><b>Semaine allégée conseillée.</b> ' + esc(d.why) + ' Elle réduit les séries et les charges pendant 7 jours pour mieux récupérer, puis tu progresses plus vite.</span><span class="chips"><button class="chip go" data-act="deload" data-v="1">Lancer une semaine allégée</button></span></div>';
+  return '<div class="banner"><span><b>Semaine allégée conseillée.</b> ' + esc(d.why) + '</span><span class="chips"><button class="chip go" data-act="deload" data-v="1">Lancer une semaine allégée</button></span></div>';
 }
 function methLine(it) {
   return '<div class="meth"><span>Repos <b>' + esc(it.restTxt) + '</b></span><span>Reps en réserve <b>' + esc(it.rir) + '</b></span></div>' +
@@ -2468,11 +2468,16 @@ function methLine(it) {
 }
 function focusCard() {
   if (!S.sel.length) return '';
-  var sel = SEL(), q = sel.length, auto = q > S.sel.length, mx = ropts().maxEx;
-  var txt = q === 1 ? 'Toute la séance travaille <b>' + esc(sel[0]) + '</b>.' : '<b>' + esc(sel[0]) + '</b> est le muscle principal (' + C.quota(q, 0, mx) + ' exercices, les plus lourds en premier). ' + sel.slice(1).map(function (m, i) { return '<b>' + esc(m) + '</b> (' + C.quota(q, i + 1, mx) + ')'; }).join(' et ') + (auto ? ', un muscle adjacent, ajouté automatiquement,' : '') + ' complète' + (q > 2 ? 'nt' : '') + ' la fin de séance.';
-  return '<div class="msg tip"><div class="lab">Muscle à travailler en priorité</div><p class="why">' + txt + '</p>' +
-    (q > 1 ? '<div class="chips">' + sel.map(function (m, i) { return '<button class="chip' + (i === 0 ? ' go' : '') + '" data-act="focus" data-m="' + esc(m) + '" aria-pressed="' + (i === 0) + '">' + (i === 0 ? '★ ' : '') + esc(m) + '</button>'; }).join('') + '</div><p class="legend">Touche un muscle pour en faire le principal. Choisis-en un autre dans la liste pour changer le complément.</p>' : '') +
-    (auto ? '<div><button class="btn" data-act="solo">Que du ' + esc(S.sel[0]) + ', sans complément</button></div>' : (S.solo ? '<div><button class="btn" data-act="solo">Ajouter un muscle adjacent</button></div>' : '')) + '</div>';
+  var sel = SEL(), q = sel.length, auto = q > S.sel.length;
+  if (q === 1 && !S.solo) return '';
+  return '<div class="msg tip"><p class="why" style="margin:0">Muscle principal : <b>' + esc(sel[0]) + '</b>' + (q > 1 ? ', complété par ' + sel.slice(1).map(function (m) { return '<b>' + esc(m) + '</b>'; }).join(' et ') : '') + '.</p>' +
+    (q > 1 ? '<div class="chips">' + sel.map(function (m, i) { return '<button class="chip' + (i === 0 ? ' go' : '') + '" data-act="focus" data-m="' + esc(m) + '" aria-pressed="' + (i === 0) + '">' + (i === 0 ? '★ ' : '') + esc(m) + '</button>'; }).join('') + '</div>' : '') +
+    (auto ? '<div><button class="btn" data-act="solo">Que du ' + esc(S.sel[0]) + '</button></div>' : (S.solo ? '<div><button class="btn" data-act="solo">Ajouter un muscle adjacent</button></div>' : '')) + '</div>';
+}
+function fold(key, label, body) {
+  if (!body) return '';
+  var o = S.open && S.open[key];
+  return '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><button class="chip" data-act="fold" data-k="' + key + '" aria-expanded="' + !!o + '" style="align-self:flex-start">' + label + (o ? ' ▴' : ' ▾') + '</button>' + (o ? body : '') + '</div>';
 }
 function viewSeance() {
   if (S.active) return viewWorkout();
@@ -2484,13 +2489,15 @@ function viewSeance() {
   var tiles = C.GROUPS.map(function (g) {
     return '<div class="lab">' + g[0] + '</div><div class="tiles">' + g[1].map(function (m) {
       var s = byM[m], on = S.sel.indexOf(m) >= 0;
-      return '<button class="tile" data-act="pick" data-m="' + m + '" aria-pressed="' + on + '"><span class="n">' + m + '</span><span class="s"><i class="dot ' + s.state + '"></i>' + esc(s.label) + '</span><span class="k">' + (m === injured() ? 'à ménager' : s.s7 + ' séries / 7 j') + '</span></button>';
+      return '<button class="tile" data-act="pick" data-m="' + m + '" aria-pressed="' + on + '"><span class="n">' + m + '</span><span class="s"><i class="dot ' + s.state + '"></i>' + esc(s.label) + '</span>' + (m === injured() ? '<span class="k">à ménager</span>' : '') + '</button>';
     }).join('') + '</div>';
   }).join('');
-  var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche jusqu\'à trois muscles : le premier est le muscle principal, les suivants le complètent. Le point indique la récupération : vert, plus de 48 h.</p></div>' +
+  var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche un muscle (jusqu\'à 3). Point vert : bien récupéré.</p></div>' +
     '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + tiles + '</section>';
-  h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + evCard() + planCard() + routinesCard() + h;
-  h += companionsSection(byM);
+  var evBusy = activeEvent() || pendingWeek() || S.evq || S.evwarn, mo = S.open && S.open.more;
+  var rq = ROUT.length ? '<div class="chips"><span class="legend" style="align-self:center;margin:0">Mes routines</span>' + ROUT.map(function (r) { return '<button class="chip go" data-act="rbstart" data-k="' + esc(r.id) + '">' + esc(r.name) + '</button>'; }).join('') + '</div>' : '';
+  h = '<div class="row" style="justify-content:space-between"><button class="btn back" data-act="home">← Accueil</button><button class="chip" data-act="fold" data-k="more" aria-expanded="' + !!mo + '">Plus ' + (mo ? '▴' : '▾') + '</button></div>' + (evBusy ? evCard() : '') + weekCard() + rq + (mo ? (evBusy ? '' : evCard()) + planCard() + routinesCard() : '') + h;
+  h += fold('comp', 'Muscles à associer', companionsSection(byM));
   autoXtra();
   if (!S.sel.length) return h + '<p class="empty">Choisis un muscle pour obtenir ta séance.</p>';
   h += deloadCard() + focusCard();
@@ -2500,20 +2507,19 @@ function viewSeance() {
     h += '<div class="banner' + (crit ? ' crit' : '') + '">' + rec.warnings.map(function (w) { return '<span>' + esc(w.text) + '</span>'; }).join('') +
       (rec.rested.length ? '<span class="chips">' + rec.rested.slice(0, 3).map(function (s) { return '<button class="chip go" data-act="swap" data-m="' + s.muscle + '">' + s.muscle + ' · ' + esc(s.label) + '</button>'; }).join('') + '</span>' : '') + '</div>';
   }
-  if (rec.items.length) h += '<section class="sec"><div><h2>Ta séance</h2><p class="sub">' + rec.items.length + ' exercice' + (rec.items.length > 1 ? 's' : '') + ' choisi' + (rec.items.length > 1 ? 's' : '') + ' dans ton historique (6 au maximum), les plus lourds d\'abord.</p></div>';
+  if (rec.items.length) h += '<section class="sec"><div><h2>Ta séance</h2><p class="sub">' + rec.items.length + ' exercice' + (rec.items.length > 1 ? 's' : '') + ', les plus lourds d\'abord.</p></div>';
   h += rec.items.map(function (it, i) {
     var key = it.name, dn = !!S.done[key];
     var tgt = it.bw ? '<b>' + it.sets + ' × ' + it.reps + '</b><small>reps' + (it.w > 0 ? ' · +' + kg(it.w) + ' kg' : '') + '</small>' : '<b>' + it.sets + ' × ' + it.reps + '</b><span>' + kg(it.w) + ' kg</span>';
-    return '<article class="card' + (dn ? ' done' : '') + '"><div class="row"><div><div class="ename">' + esc(it.name) + '</div><div class="emu">' + it.muscle + ' · ' + (it.kind === 'C' ? 'polyarticulaire' : 'isolation') + ' · zone ' + it.zone + ' reps</div></div>' +
+    var od = S.open && S.open['d:' + key];
+    return '<article class="card' + (dn ? ' done' : '') + '"><div class="row"><div><div class="ename">' + esc(it.name) + '</div><div class="emu">' + it.muscle + ' · zone ' + it.zone + ' reps</div></div>' +
       '<button class="btn" data-act="done" data-k="' + esc(key) + '" aria-pressed="' + dn + '">' + (dn ? 'Fait' : 'À faire') + '</button></div>' +
       '<div class="target">' + tgt + '</div><p class="why">' + esc(it.why) + '</p>' +
-      methLine(it) +
-      (it.warm ? '<div class="warm">Échauffement : <b>' + it.warm + '</b></div>' : '') +
-      '<div class="hist">' + C.fmtDate(it.lastDate) + ' : ' + esc(it.lastLine) + '</div>' +
       (it.plateau ? '<div><span class="pill flat">Stagne depuis 6 semaines</span></div>' : '') +
-       '<div><button class="btn" data-act="why" data-k="' + esc(it.name) + '" aria-expanded="' + (S.wy === it.name) + '">Pourquoi celui-là ?</button></div>' + (S.wy === it.name ? whyHTML(it.name, rec.items.map(function (x) { return x.name; }).concat(S.xtra)) : '') +
-      (LIBMAP[it.name] ? '<div><button class="btn" data-act="sfiche" data-k="' + esc(it.name) + '" aria-expanded="' + (S.sf === it.name) + '">' + (S.sf === it.name ? 'Masquer la fiche' : 'Voir la fiche') + '</button></div>' + (S.sf === it.name ? ficheHTML(it.name) : '') : '') + '</article>';
-  }).join('') + (rec.items.length ? '</section>' : '') + varietySection() + adviceCard('Après la séance') + '<button class="btn primary big" data-act="start">Démarrer l\'entraînement</button>';
+      '<div class="chips">' + (LIBMAP[it.name] ? '<button class="chip" data-act="sfiche" data-k="' + esc(it.name) + '" aria-expanded="' + (S.sf === it.name) + '">' + (S.sf === it.name ? 'Masquer la fiche' : 'Fiche') + '</button>' : '') + '<button class="chip" data-act="fold" data-k="d:' + esc(key) + '" aria-expanded="' + !!od + '">Détails ' + (od ? '▴' : '▾') + '</button></div>' +
+      (S.sf === it.name ? ficheHTML(it.name) : '') +
+      (od ? methLine(it) + (it.warm ? '<div class="warm">Échauffement : <b>' + it.warm + '</b></div>' : '') + '<div class="hist">' + C.fmtDate(it.lastDate) + ' : ' + esc(it.lastLine) + '</div>' + '<div><button class="btn" data-act="why" data-k="' + esc(it.name) + '" aria-expanded="' + (S.wy === it.name) + '">Pourquoi celui-là ?</button></div>' + (S.wy === it.name ? whyHTML(it.name, rec.items.map(function (x) { return x.name; }).concat(S.xtra)) : '') : '') + '</article>';
+  }).join('') + (rec.items.length ? '</section>' : '') + varietySection() + fold('adv', 'Conseils après la séance', adviceCard('Après la séance')) + '<div style="position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));z-index:5"><button class="btn primary big" style="width:100%;box-shadow:0 8px 24px rgba(0,0,0,.55)" data-act="start">Démarrer l\'entraînement</button></div>';
   return h;
 }
 
@@ -2566,12 +2572,14 @@ function viewProgres() {
   var h = '<section class="sec"><div><h2>Cette semaine</h2></div><div class="strip"><div class="stat"><b>' + cur.sessions + '</b><span>séances</span></div><div class="stat"><b>' + cur.sets + '</b><span>séries de travail</span></div><div class="stat"><b>' + (Math.round(avgS * 10) / 10).toString().replace('.', ',') + '</b><span>séances / sem. sur 4 sem.</span></div></div></section>';
   h += weekCompare(ws);
   h += '<section class="sec"><div><h2>Séries par semaine</h2><p class="sub">Le chiffre au-dessus de chaque barre est le nombre de séances. Semaine en cours en pâle.</p></div><div class="card">' + weekChart(ws) + '</div></section>';
+  var R = h; h = '';
   var mx = 24, rows = C.MUSCLES.map(function (m) { return C.muscleStatus(model, m, n); });
   rows.forEach(function (r) { mx = Math.max(mx, r.s7, r.avg4); });
   h += '<section class="sec"><div><h2>Volume par muscle</h2><p class="sub">Séries des 7 derniers jours. Le trait blanc est ta moyenne sur 4 semaines.</p></div><div class="card">' +
     rows.map(function (r) {
       return '<div class="mrow"><span>' + r.muscle + '</span><div class="mtrack"><div class="mband" style="left:' + (10 / mx * 100) + '%;width:' + (10 / mx * 100) + '%"></div><div class="mfill" style="width:' + (r.s7 / mx * 100) + '%"></div><div class="mavg" style="left:' + Math.min(99, r.avg4 / mx * 100) + '%"></div></div><span class="mono">' + r.s7 + '</span></div>';
     }).join('') + '<div class="legend">Bande claire : 10 à 20 séries par semaine, la zone courante pour progresser.</div></div></section>';
+  var V = h; h = '';
   var p = C.progress(model, n);
   var li = function (g, flat) {
     var ch = g.st.change, cls = flat ? 'flat' : 'up';
@@ -2580,7 +2588,9 @@ function viewProgres() {
   h += '<section class="sec"><div><h2>Ils progressent</h2><p class="sub">Meilleure séance des 6 dernières semaines contre les 6 précédentes.</p></div>' +
     (p.gains.length ? '<div class="list">' + p.gains.slice(0, 6).map(function (g) { return li(g, false); }).join('') + '</div>' : '<p class="empty">Pas encore assez de séances pour comparer.</p>') + '</section>';
   if (p.plateaus.length) h += '<section class="sec"><div><h2>Ils stagnent</h2><p class="sub">Au moins trois séances récentes, sans progrès sur 6 semaines. Change les répétitions, la tempo ou la variante.</p></div><div class="list">' + p.plateaus.slice(0, 5).map(function (g) { return li(g, true); }).join('') + '</div></section>';
-  return h + recordsSection() + measSection() + historySection();
+  var seg = [['r', 'Résumé'], ['e', 'Exercices'], ['c', 'Corps'], ['h', 'Historique']], pt = S.pt || 'r';
+  var bar = '<div class="chips">' + seg.map(function (x) { return '<button class="chip' + (pt === x[0] ? ' go' : '') + '" data-act="pt" data-k="' + x[0] + '" aria-pressed="' + (pt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>';
+  return bar + (pt === 'e' ? h + recordsSection() : pt === 'c' ? V + measSection() : pt === 'h' ? historySection() : R);
 }
 
 function historySection() {
@@ -3277,11 +3287,12 @@ function varietySection() {
   if (!firsts.length) for (i = 0; i < Math.min(2, pool.length); i++) pick.push(pool[(off + i) % pool.length]);
   if (!pick.length) return '';
   var fresh = firsts.length > 0, miss = SEL().filter(function (m) { return !hasHist(m); });
-  return '<section class="sec"><div><h2>' + (fresh ? 'Pour démarrer' : 'Pour varier') + '</h2><p class="sub">' + (fresh ? 'Tu n\'as encore rien fait pour ' + miss.map(esc).join(', ') + ' : voici une première séance, déjà ajoutée. Retire ce que tu ne veux pas.' : 'Des exercices que tu n\'as encore jamais faits dans ton historique.') + '</p></div>' + pick.map(function (e) {
+  var secv = '<section class="sec"><div><h2>' + (fresh ? 'Pour démarrer' : 'Pour varier') + '</h2><p class="sub">' + (fresh ? 'Tu n\'as encore rien fait pour ' + miss.map(esc).join(', ') + ' : voici une première séance, déjà ajoutée. Retire ce que tu ne veux pas.' : 'Des exercices que tu n\'as encore jamais faits dans ton historique.') + '</p></div>' + pick.map(function (e) {
     var on = S.xtra.indexOf(e.n) >= 0;
     return '<article class="card"><div class="row"><div><div class="ename">' + esc(e.n) + '</div><div class="emu">' + e.m + ' · ' + esc(e.eq) + '</div></div><button class="btn" data-act="addx" data-k="' + esc(e.n) + '" aria-pressed="' + on + '">' + (on ? 'Ajouté' : 'Ajouter') + '</button></div>' +
       '<p class="why">' + esc(e.why) + '</p><div class="chips"><button class="btn" data-act="goto" data-k="' + esc(e.n) + '">Voir la fiche</button><button class="btn" data-act="why" data-k="' + esc(e.n) + '" aria-expanded="' + (S.wy === e.n) + '">Pourquoi celui-là ?</button></div>' + (S.wy === e.n ? whyHTML(e.n, S.xtra) : '') + '</article>';
   }).join('') + '</section>';
+  return fresh ? secv : fold('var', 'Pour varier : exercices à essayer', secv);
 }
 function viewExos() {
   var n = now(), all = Object.keys(model.ex).map(function (k) { return model.ex[k]; });
@@ -3318,7 +3329,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.53';
+var APP_VER = 'v0.54';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3372,7 +3383,7 @@ function render() {
   $('meta').textContent = metaText();
   if (S.active) { $('meta').setAttribute('data-act', 'tab'); $('meta').setAttribute('data-t', 'seance'); } else { $('meta').removeAttribute('data-act'); $('meta').removeAttribute('data-t'); }
   $('tabs').innerHTML = TB.map(function (t) { return '<button data-act="tab" data-t="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true">' + t[2] + '</svg>' + t[1] + '</button>'; }).join('');
-  var v = (S.tab === 'seance' ? backupNag() : '') + (S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData());
+  var v = (S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData());
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
   Anim.mount();
@@ -3527,14 +3538,14 @@ function viewWorkout() {
     '<div class="row"><span class="sub" id="rest">' + restText() + '</span><span class="mono sub">' + okn + '/' + total + ' séries</span></div>' +
     (S.rsv ? '<div class="row"><input class="fin" id="rs-name" type="text" maxlength="40" placeholder="Nom de la routine" value="' + esc(S.rsvName == null ? a.title : S.rsvName) + '" aria-label="Nom de la routine"><button class="btn primary" data-act="rsvgo">Enregistrer</button></div>' : '') +
     (S.wmsg ? '<div class="msg err">' + esc(S.wmsg) + '</div>' : '') +
-    '<div class="chips"><button class="chip" data-act="rsv" aria-expanded="' + !!S.rsv + '">Enregistrer comme routine</button><button class="chip" data-act="snd" aria-pressed="' + (lsGet('cds.snd') === '1') + '">Son à la fin du repos</button></div><div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
+    '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button><button class="chip" style="white-space:nowrap" data-act="fold" data-k="wopt" aria-expanded="' + !!(S.open && S.open.wopt) + '">Options ' + (S.open && S.open.wopt ? '▴' : '▾') + '</button></div>' + (S.open && S.open.wopt ? '<div class="chips"><button class="chip" data-act="rsv" aria-expanded="' + !!S.rsv + '">Enregistrer comme routine</button><button class="chip" data-act="snd" aria-pressed="' + (lsGet('cds.snd') === '1') + '">Son à la fin du repos</button></div>' : '') + '</div></section>';
   a.exos.forEach(function (e, i) {
-    h += '<article class="card' + ((e.ss || (i > 0 && a.exos[i - 1].ss)) ? ' ss' : '') + '"><div class="row"><div><div class="ename">' + ((e.ss || (i > 0 && a.exos[i - 1].ss)) ? '<span class="pill up">Superset</span> ' : '') + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
+    h += '<article class="card' + ((e.ss || (i > 0 && a.exos[i - 1].ss)) ? ' ss' : '') + '"><div class="row"><div><div class="ename">' + ((e.ss || (i > 0 && a.exos[i - 1].ss)) ? '<span class="pill up">Superset</span> ' : '') + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="fold" data-k="o' + i + '" aria-expanded="' + !!(S.open && S.open['o' + i]) + '" aria-label="Plus d\'actions">⋯</button></div></div>' +
       (S.wy === e.name ? whyHTML(e.name, a.exos.map(function (x) { return x.name; })) : '') +
       (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="lab">Ou choisis librement</div><select class="search repsel" data-i="' + i + '" aria-label="Choisir un autre exercice"><option value="">Un exercice de la bibliothèque…</option>' + C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (x) { return x.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (x) { return '<option value="' + esc(x.n) + '">' + esc(x.n) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' +
         '<div class="lab">Ou écris ton propre exercice</div><div class="fgrid"><input class="fin" id="rep-free" type="text" placeholder="Nom de l\'exercice" aria-label="Nom de ton exercice"><select class="fin" id="rep-mu" aria-label="Muscle travaillé">' + C.MUSCLES.map(function (m) { return '<option' + (m === curMuscle(e.name) ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div><button class="btn" data-act="wrepfree" data-i="' + i + '">Utiliser cet exercice</button>' +
         '<div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
-      toolsHTML(e, i) + (S.pl === i ? platesHTML(e) : '') +
+      ((S.open && S.open['o' + i]) ? '<div class="chips"><button class="chip" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="chip" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div>' + toolsHTML(e, i) : '') + (S.pl === i ? platesHTML(e) : '') +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
       (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
       '<div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' +
@@ -3544,10 +3555,10 @@ function viewWorkout() {
           '<input class="in" id="r-' + i + '-' + j + '" inputmode="numeric" data-f="r" data-i="' + i + '" data-j="' + j + '" value="' + s.r + '" aria-label="Répétitions, série ' + (j + 1) + '">' +
           '<button class="btn ck" data-act="wset" data-i="' + i + '" data-j="' + j + '" aria-pressed="' + !!s.ok + '" aria-label="Valider la série ' + (j + 1) + '">✓</button>' +
           '<button class="btn x" data-act="wdel" data-i="' + i + '" data-j="' + j + '" aria-label="Supprimer la série ' + (j + 1) + '">×</button></div>';
-      }).join('') + '</article>';
+      }).join('') + '<button class="btn" data-act="wadd" data-i="' + i + '" style="align-self:flex-start">+ Série</button></article>';
   });
   var opts = C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (e) { return e.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (e) { return '<option value="' + esc(e.n) + '">' + esc(e.n) + (model.ex[e.n] ? '' : ' (nouveau)') + '</option>'; }).join('') + '</optgroup>'; }).join('');
-  return h + '<select id="addex" class="search" aria-label="Ajouter un exercice"><option value="">+ Ajouter un exercice</option>' + opts + '</select>' + adviceCard('Après ta séance');
+  return h + '<select id="addex" class="search" aria-label="Ajouter un exercice"><option value="">+ Ajouter un exercice</option>' + opts + '</select>';
 }
 function finishWorkout() {
   var a = S.active, exos = [];
@@ -3782,6 +3793,8 @@ document.addEventListener('click', function (e) {
   else if (a === 'bk') { backupFile(); return; }
   else if (a === 'bkcopy') { copyBackup(); return; }
   else if (a === 'bkgo') { applyRestore(); }
+  else if (a === 'fold') { S.open = S.open || {}; S.open[k] = !S.open[k]; }
+  else if (a === 'pt') { S.pt = k; }
   else if (a === 'autobk') { lsSet('cds.autobk', lsGet('cds.autobk') === '1' ? '0' : '1'); }
   else if (a === 'snaprest') { var sn = SNAPS[wi]; if (sn) { var n2 = sn.n; S.bk = sn.obj; S.bkInfo = { date: sn.obj.date, n: n2 }; S.msg = null; } }
   else if (a === 'bkno') { S.bk = null; }
