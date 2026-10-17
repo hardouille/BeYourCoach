@@ -1978,6 +1978,7 @@ try { if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) Anim.se
 var TABS = [
   ['seance', 'Séance', '<path d="M3 12h18M6.5 8v8M17.5 8v8M10 6v12M14 6v12"/>'],
   ['progres', 'Progrès', '<path d="M3 17l5-5 4 3 8-9M15 6h5v5"/>'],
+  ['histo', 'Historique', '<path d="M12 7v5l3 2"/><path d="M3.5 12a8.5 8.5 0 102.6-6.1M3.5 4v4.5H8"/>'],
   ['exos', 'Exos', '<path d="M4 6h16M4 12h16M4 18h10"/>'],
   ['coach', 'Coach', '<path d="M5 5h14a2 2 0 012 2v8a2 2 0 01-2 2h-7l-4 4v-4H5a2 2 0 01-2-2V7a2 2 0 012-2z"/>'],
   ['repas', 'Repas', '<path d="M7 3v8a2 2 0 002 2v8M11 3v8a2 2 0 01-2 2M17 3c-2 2-2.5 5-2.5 8H17v10"/>'],
@@ -2759,11 +2760,17 @@ function viewProgres() {
   h += '<section class="sec"><div><h2>Ils progressent</h2><p class="sub">Meilleure séance des 6 dernières semaines contre les 6 précédentes.</p></div>' +
     (p.gains.length ? '<div class="list">' + p.gains.slice(0, 6).map(function (g) { return li(g, false); }).join('') + '</div>' : '<p class="empty">Pas encore assez de séances pour comparer.</p>') + '</section>';
   if (p.plateaus.length) h += '<section class="sec"><div><h2>Ils stagnent</h2><p class="sub">Au moins trois séances récentes, sans progrès sur 6 semaines. Change les répétitions, la tempo ou la variante.</p></div><div class="list">' + p.plateaus.slice(0, 5).map(function (g) { return li(g, true); }).join('') + '</div></section>';
-  var seg = [['r', 'Résumé'], ['e', 'Exercices'], ['c', 'Corps'], ['h', 'Historique']], pt = S.pt || 'r';
+  var seg = [['r', 'Résumé'], ['e', 'Exercices'], ['c', 'Corps']], pt = S.pt || 'r';
   var bar = '<div class="chips">' + seg.map(function (x) { return '<button class="chip' + (pt === x[0] ? ' go' : '') + '" data-act="pt" data-k="' + x[0] + '" aria-pressed="' + (pt === x[0]) + '">' + x[1] + '</button>'; }).join('') + '</div>';
-  return bar + (pt === 'e' ? h + recordsSection() : pt === 'c' ? V + measSection() : pt === 'h' ? historySection() : R);
+  return bar + (pt === 'e' ? h + recordsSection() : pt === 'c' ? V + measSection() : R);
 }
 
+function viewHisto() {
+  var n = now(), all = model.sessions, ws = C.weekly(model, n, 1)[0];
+  var mo = all.filter(function (se) { return n - se.t < 30 * 864e5; }).length;
+  var top = '<section class="sec"><div><h2>Mes séances</h2></div><div class="strip"><div class="stat"><b>' + all.length + '</b><span>séances au total</span></div><div class="stat"><b>' + (ws ? ws.sessions : 0) + '</b><span>cette semaine</span></div><div class="stat"><b>' + mo + '</b><span>sur 30 jours</span></div></div></section>';
+  return top + historySection();
+}
 function historySection() {
   var all = model.sessions.slice().reverse(), shown = all.slice(0, S.hn);
   if (!all.length) return '';
@@ -3500,7 +3507,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.63';
+var APP_VER = 'v0.64';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3549,12 +3556,12 @@ function render() {
   if (S.onb) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewOnboarding(); return; }
   if (S.home || (!hasData() && !S.active && !S.fresh)) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewHome(); return; }
   if (!hasData() && !(prof() && !S.active)) { $('meta').textContent = S.active ? metaText() : ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewSeance(); Anim.mount(); mountBody(); return; }
-  var NOD = !hasData(), TB = NOD ? TABS.filter(function (t) { return t[0] !== 'progres'; }) : TABS;
-  if (NOD && S.tab === 'progres') S.tab = 'seance';
+  var NOD = !hasData(), TB = NOD ? TABS.filter(function (t) { return t[0] !== 'progres' && t[0] !== 'histo'; }) : TABS;
+  if (NOD && (S.tab === 'progres' || S.tab === 'histo')) S.tab = 'seance';
   $('meta').textContent = metaText();
   if (S.active) { $('meta').setAttribute('data-act', 'tab'); $('meta').setAttribute('data-t', 'seance'); } else { $('meta').removeAttribute('data-act'); $('meta').removeAttribute('data-t'); }
   $('tabs').innerHTML = TB.map(function (t) { return '<button data-act="tab" data-t="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true">' + t[2] + '</svg>' + t[1] + '</button>'; }).join('');
-  var v = (S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData());
+  var v = (S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'histo' ? viewHisto() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData());
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
   Anim.mount(); mountBody();
