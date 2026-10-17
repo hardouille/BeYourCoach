@@ -3563,7 +3563,8 @@ function finishWorkout() {
     var lastH = X.hist[X.hist.length - 1];
     if (before[e.name] > 0 && lastH.score > before[e.name] + 1e-9) prs.push(e.name);
   });
-  S.summary = { dur: Date.now() - a.t0, sets: sets, vol: Math.round(vol), prs: prs, saved: saved, title: a.title };
+  S.summary = { dur: Date.now() - a.t0, sets: sets, vol: Math.round(vol), prs: prs, saved: saved, title: a.title, auto: lsGet('cds.autobk') === '1' };
+  if (saved) snapSave('seance');
   S.active = null; S.wmsg = null; S.confirm = null; saveActive(); unwake();
 }
 function viewSummary() {
@@ -3572,6 +3573,7 @@ function viewSummary() {
     '<div class="strip"><div class="stat"><b>' + clock(s.dur) + '</b><span>durée</span></div><div class="stat"><b>' + s.sets + '</b><span>séries validées</span></div><div class="stat"><b>' + s.vol.toLocaleString('fr-FR') + '</b><span>kg soulevés au total</span></div></div>' +
     (s.prs.length ? '<div class="card"><div class="lab">Nouveaux records e1RM</div>' + s.prs.map(function (n) { return '<div class="ename" style="font-size:14.5px">' + esc(n) + '</div>'; }).join('') + '</div>' : '') +
     '<div class="msg' + (s.saved ? '' : ' err') + '">' + (s.saved ? 'Séance ajoutée à ton historique. Tes courbes et tes prochaines charges en tiennent compte.' : 'Séance prise en compte, mais ce navigateur n\'a pas pu la garder. Exporte le CSV maintenant.') + '</div>' +
+    (s.saved ? '<div class="legend">Une copie de sécurité a été gardée automatiquement sur cet appareil.' + (s.auto ? '' : ' Pour aussi recevoir un fichier à chaque séance, active-le dans Données.') + '</div>' : '') +
     '<div class="row"><button class="btn primary" data-act="bk">Sauvegarder mes données</button><button class="btn" data-act="tab" data-t="data">Exporter le CSV</button><button class="btn" data-act="sumclose">Fermer</button></div></section>' + adviceCard('Pour finir');
 }
 
@@ -3601,6 +3603,41 @@ function backupFile() {
     setTimeout(function () { URL.revokeObjectURL(u); }, 3000); done();
   } catch (e) { S.msg = { err: true, t: 'Ce navigateur bloque le téléchargement. Le texte de la sauvegarde est affiché ci-dessous : copie-le et garde-le dans un fichier.' }; S.bkText = txt; render(); }
 }
+/* copies internes automatiques (IndexedDB, 5 dernières) */
+var SNAPS = [];
+function snapDB(cb) {
+  try {
+    var r = indexedDB.open('beyourcoach', 1);
+    r.onupgradeneeded = function () { r.result.createObjectStore('snaps', { keyPath: 't' }); };
+    r.onsuccess = function () { cb(r.result); };
+    r.onerror = function () { cb(null); };
+    r.onblocked = function () { cb(null); };
+  } catch (e) { cb(null); }
+}
+function snapLoad(after) {
+  snapDB(function (db) {
+    if (!db) { if (after) after(); return; }
+    try {
+      var q = db.transaction('snaps').objectStore('snaps').getAll();
+      q.onsuccess = function () { SNAPS = (q.result || []).sort(function (a, b) { return b.t - a.t; }); db.close(); if (after) after(); };
+      q.onerror = function () { db.close(); if (after) after(); };
+    } catch (e) { if (after) after(); }
+  });
+}
+function snapSave(why) {
+  snapDB(function (db) {
+    if (!db) return;
+    try {
+      var o = backupObj(), n = 0; try { n = JSON.parse(o.data['cds.log'] || '[]').length; } catch (e) {}
+      var tx = db.transaction('snaps', 'readwrite'), st = tx.objectStore('snaps');
+      st.put({ t: Date.now(), why: why, n: n, obj: o });
+      var kq = st.getAllKeys();
+      kq.onsuccess = function () { kq.result.sort(function (a, b) { return b - a; }).slice(5).forEach(function (k) { st.delete(k); }); };
+      tx.oncomplete = function () { db.close(); snapLoad(function () { if (S.tab === 'data' || S.summary) render(); }); };
+      tx.onerror = function () { db.close(); };
+    } catch (e) {}
+  });
+}
 function stageRestore(txt) {
   var o = null; try { o = JSON.parse(txt); } catch (e) { o = null; }
   if (!o || o.app !== 'BeYourCoach' || !o.data || typeof o.data !== 'object') { S.bk = null; S.msg = { err: true, t: 'Ce fichier n\'est pas une sauvegarde BeYourCoach.' }; return; }
@@ -3616,10 +3653,21 @@ function applyRestore() {
     location.reload();
   } catch (e) { S.msg = { err: true, t: 'Restauration impossible dans ce navigateur.' }; }
 }
+function snapList() {
+  if (!SNAPS.length) return '<div class="legend">Une copie interne est gardée automatiquement après chaque séance (les 5 dernières). Aucune pour l\'instant.</div>';
+  return '<div class="lab" style="margin-top:10px">Copies automatiques sur cet appareil</div><div class="legend">Après chaque séance, les 5 dernières. Elles disparaissent si tu effaces les données du site ou changes de téléphone : le fichier reste la vraie protection.</div>' +
+    SNAPS.map(function (x, i) {
+      var d = new Date(x.t), t = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      return '<div class="row" style="align-items:center;justify-content:space-between"><span class="legend" style="margin:0">' + t + ' · ' + x.n + ' séance' + (x.n > 1 ? 's' : '') + '</span><button class="btn" data-act="snaprest" data-i="' + i + '">Restaurer</button></div>';
+    }).join('');
+}
 function backupCard() {
   var d = daysSinceBackup();
   return '<section class="sec"><div class="lab">Sauvegarde complète</div><div class="drop"><div class="ename">Garde tout en sécurité</div><div class="legend">Profil, séances, import CSV, poids, repas, mensurations et réglages, dans un seul fichier. ' + (d === null ? 'Aucune sauvegarde faite pour l\'instant.' : 'Dernière sauvegarde : ' + (d === 0 ? 'aujourd\'hui' : 'il y a ' + d + ' jour' + (d > 1 ? 's' : '')) + '.') + '</div>' +
     '<div class="row"><button class="btn primary" data-act="bk">Créer une sauvegarde</button><label class="btn">Restaurer…<input id="bkfile" type="file" hidden accept=".json,application/json"></label></div>' +
+    '<div class="row"><button class="btn' + (lsGet('cds.autobk') === '1' ? ' primary' : '') + '" data-act="autobk">Fichier après chaque séance : ' + (lsGet('cds.autobk') === '1' ? 'activé' : 'désactivé') + '</button></div>' +
+    '<div class="legend">Activé, la feuille de partage (ou un téléchargement) s\'ouvre quand tu termines une séance : tu choisis où ranger le fichier (Drive, mail, iCloud…).</div>' +
+    snapList() +
     (S.bk ? '<div class="msg err">Restaurer la sauvegarde du ' + esc(String(S.bkInfo.date || '').slice(0, 10)) + ' (' + S.bkInfo.n + ' séance' + (S.bkInfo.n > 1 ? 's' : '') + ') ? Elle remplace toutes les données de cet appareil.<div class="row"><button class="btn primary" data-act="bkgo">Confirmer la restauration</button><button class="btn" data-act="bkno">Annuler</button></div></div>' : '') +
     (S.bkText ? '<textarea class="csv" readonly>' + esc(S.bkText) + '</textarea>' : '') + '</div></section>';
 }
@@ -3695,6 +3743,8 @@ document.addEventListener('click', function (e) {
   else if (a === 'home') { S.onb = null; if (!S.active) S.home = true; else go('seance'); S.msg = null; }
   else if (a === 'bk') { backupFile(); return; }
   else if (a === 'bkgo') { applyRestore(); }
+  else if (a === 'autobk') { lsSet('cds.autobk', lsGet('cds.autobk') === '1' ? '0' : '1'); }
+  else if (a === 'snaprest') { var sn = SNAPS[wi]; if (sn) { var n2 = sn.n; S.bk = sn.obj; S.bkInfo = { date: sn.obj.date, n: n2 }; S.msg = null; } }
   else if (a === 'bkno') { S.bk = null; }
   else if (a === 'snd') { var so = lsGet('cds.snd') === '1'; lsSet('cds.snd', so ? '0' : '1'); if (!so) { unlockAudio(); beep(); } }
   else if (a === 'wwu') { var ew = S.active.exos[wi], w0 = 0; ew.sets.some(function (s0) { if (!s0.wu && s0.w > 0) { w0 = s0.w; return true; } return false; }); if (w0 >= 30) { var bar0 = /barre/i.test(ew.name) ? 20 : 0, mk = function (f, r) { var w = Math.round(w0 * f / 2.5) * 2.5; if (bar0 && w < bar0) w = bar0; return { w: w, r: r, ok: false, wu: true }; }; ew.sets = [mk(.4, 8), mk(.6, 5), mk(.8, 3)].filter(function (s1, i1, a1) { return i1 === 0 || s1.w > a1[i1 - 1].w; }).concat(ew.sets); saveActive(); } }
@@ -3770,7 +3820,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'wrm') { if (S.confirm === 'rm' + wi) { S.active.exos.splice(wi, 1); S.rep = null; S.confirm = null; saveActive(); } else S.confirm = 'rm' + wi; }
   else if (a === 'wdel') { var ex1 = S.active.exos[wi]; ex1.sets.splice(wj, 1); if (!ex1.sets.length) S.active.exos.splice(wi, 1); saveActive(); }
   else if (a === 'wabort') { if (S.confirm === 'abort') { S.active = null; saveActive(); unwake(); S.confirm = null; } else S.confirm = 'abort'; }
-  else if (a === 'wfin') finishWorkout();
+  else if (a === 'wfin') { finishWorkout(); if (S.summary && S.summary.saved && lsGet('cds.autobk') === '1') backupFile(); }
   else if (a === 'sumclose') S.summary = null;
   else if (a === 'pexport') exportProfile();
   else if (a === 'pcopy') {
@@ -3833,6 +3883,7 @@ document.addEventListener('change', function (e) {
   fr.onerror = function () { S.msg = { err: true, t: 'Impossible de lire ce fichier.' }; render(); };
   fr.readAsText(e.target.files[0]);
 });
+snapLoad(function () { if (S.tab === 'data') render(); });
 render();
 })();
 
