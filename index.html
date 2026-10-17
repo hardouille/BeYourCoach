@@ -3315,7 +3315,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.51';
+var APP_VER = 'v0.52';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3388,7 +3388,7 @@ function clock(ms) { var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(
 function restText() {
   var a = S.active; if (!a || !a.lastOk) return a && a.ssNote ? 'Superset : enchaîne l\'exercice suivant, sans repos.' : 'Valide une série pour lancer le repos.';
   var el = Date.now() - a.lastOk, t = (a.restS || 90) * 1000;
-  return el >= t ? 'Repos terminé · ' + clock(el) : 'Repos : ' + clock(el) + ' / ' + clock(t);
+  return el >= t ? 'Repos terminé · prêt pour la série suivante' : 'Repos : ' + clock(el) + ' / ' + clock(t);
 }
 var AUD = null;
 function unlockAudio() { try { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; if (!AUD) AUD = new AC(); if (AUD.state === 'suspended') AUD.resume(); } catch (e) {} }
