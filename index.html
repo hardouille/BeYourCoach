@@ -118,6 +118,11 @@ nav.tabs:empty { display: none; }
 .tabs button { padding: 7px 2px 5px; gap: 3px; }
 .tabs button[aria-current="page"] { background: var(--accent-soft); }
 @media (max-width: 400px) { .top { gap: 8px; } .brand { font-size: 19px; gap: 7px; } .brand img { width: 26px; height: 26px; } .meta { font-size: 10.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; } }
+.stage3d { position: relative; width: 100%; border: 1px solid var(--line); border-radius: 18px; overflow: hidden; background: radial-gradient(ellipse at 50% 35%, var(--surface), var(--line)); }
+.stage3d canvas { display: block; width: 100%; height: min(60vh, 430px); cursor: grab; }
+.stage3d .ld { position: absolute; inset: 0; display: grid; place-items: center; color: var(--muted); font-size: 13px; pointer-events: none; }
+.stage3d .vb { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.stage3d .vb button { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 999px; padding: 4px 11px; font-size: 12px; }
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tile { text-align: left; background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 8px 9px 10px; overflow: hidden; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .tile[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
@@ -2569,6 +2574,31 @@ function silhouetteHTML(byM) {
     '<div class="lg"><span><i style="background:var(--good)"></i>Reposé</span><span><i style="background:var(--warn)"></i>Récupère</span><span><i style="background:var(--crit)"></i>Fatigué</span><span><i style="background:var(--muted);opacity:.6"></i>Jamais fait</span></div>' +
     '<p class="sub" style="margin:0;text-align:center">' + (S.sel.length ? 'Sélection : <b>' + S.sel.join(', ') + '</b>' : 'Touche un muscle (jusqu\'à 3).') + '</p></div>';
 }
+var BODY = { inst: null, loading: false, failed: false };
+function loadScriptOnce(src) { return new Promise(function (ok, ko) { var s = document.createElement('script'); s.src = src; s.onload = ok; s.onerror = ko; document.head.appendChild(s); }); }
+function bodyStates() { var o = {}; C.MUSCLES.forEach(function (m) { o[m] = C.muscleStatus(model, m, now()).state; }); return o; }
+function mountBody() {
+  var slot = $('bslot'); if (!slot || BODY.failed) return;
+  if (BODY.inst && BODY.inst.ready) {
+    var cv = BODY.inst.canvas; if (cv.parentNode !== slot) { var ld = slot.querySelector('.ld'); if (ld) ld.remove(); slot.insertBefore(cv, slot.firstChild); }
+    BODY.inst.resize(); BODY.inst.set(bodyStates(), S.sel.slice()); return;
+  }
+  if (BODY.loading) return;
+  BODY.loading = true;
+  var wgl = false; try { var tc = document.createElement('canvas'); wgl = !!(tc.getContext('webgl2') || tc.getContext('webgl')); } catch (e) {}
+  if (!wgl) { BODY.failed = true; BODY.loading = false; render(); return; }
+  (window.THREE ? Promise.resolve() : loadScriptOnce('vendor/three.min.js')).then(function () { return window.BYCBody ? 0 : loadScriptOnce('body3d.js'); }).then(function () {
+    var cv = document.createElement('canvas'); cv.setAttribute('aria-label', 'Corps humain en 3D : touche un muscle');
+    BODY.inst = new BYCBody.Body(cv, { onPick: function (n) { var bt = document.createElement('button'); bt.setAttribute('data-act', 'pick'); bt.setAttribute('data-m', n); bt.hidden = true; document.body.appendChild(bt); bt.click(); bt.remove(); } });
+    return BODY.inst.load('body.bin');
+  }).then(function () { BODY.loading = false; mountBody(); }).catch(function () { BODY.failed = true; BODY.loading = false; render(); });
+}
+function bodyHTML(byM) {
+  if (BODY.failed) return silhouetteHTML(byM);
+  return '<div class="silo"><div class="stage3d" id="bslot"><span class="ld">Chargement du corps 3D…</span></div>' +
+    '<div class="lg"><span><i style="background:var(--crit)"></i>Choisi</span><span><i style="background:var(--good)"></i>Reposé</span><span><i style="background:var(--warn)"></i>Récupère</span><span><i style="background:var(--muted);opacity:.6"></i>Jamais fait</span></div>' +
+    '<p class="sub" style="margin:0;text-align:center">' + (S.sel.length ? 'Sélection : <b>' + S.sel.join(', ') + '</b>' : 'Touche un muscle (jusqu\'à 3). Glisse pour tourner.') + '</p></div>';
+}
 function viewSeance() {
   if (S.active) return viewWorkout();
   if (S.summary) return viewSummary();
@@ -2583,7 +2613,7 @@ function viewSeance() {
     }).join('') + '</div>';
   }).join('');
   var tpk = S.sel.length ? null : todayPick(byM);
-  var h = '<section class="sec">' + (tpk ? '<button class="today" data-act="today"><span>Séance du jour</span><b>' + tpk.p[0] + '</b><span>' + tpk.p[1].join(' · ') + (tpk.minH >= 48 ? ' · bien reposés' : '') + '</span></button>' : '') + '<div><h2>' + (tpk ? 'Ou choisis ton muscle' : 'Quel muscle aujourd\'hui ?') + '</h2></div>' + silhouetteHTML(byM) +
+  var h = '<section class="sec">' + (tpk ? '<button class="today" data-act="today"><span>Séance du jour</span><b>' + tpk.p[0] + '</b><span>' + tpk.p[1].join(' · ') + (tpk.minH >= 48 ? ' · bien reposés' : '') + '</span></button>' : '') + '<div><h2>' + (tpk ? 'Ou choisis ton muscle' : 'Quel muscle aujourd\'hui ?') + '</h2></div>' + bodyHTML(byM) +
     '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + fold('tl', 'Choisir dans la liste', tiles) + '</section>';
   var evBusy = activeEvent() || pendingWeek() || S.evq || S.evwarn, mo = S.open && S.open.more;
   var rq = ROUT.length ? '<div class="chips"><span class="legend" style="align-self:center;margin:0">Mes routines</span>' + ROUT.map(function (r) { return '<button class="chip go" data-act="rbstart" data-k="' + esc(r.id) + '">' + esc(r.name) + '</button>'; }).join('') + '</div>' : '';
@@ -3420,7 +3450,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.59';
+var APP_VER = 'v0.60';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3442,7 +3472,7 @@ function legalCard() {
     '<div class="legend">BeYourCoach ' + APP_VER + ' · bêta</div><div class="row"><button class="btn" data-act="upd">Vérifier les mises à jour</button></div>' +
     '<details class="lg"><summary>Avertissement santé</summary><p class="why">BeYourCoach donne des informations générales sur l\'entraînement et l\'alimentation. Ce n\'est pas un avis médical et cela ne remplace ni un médecin ni un coach diplômé. Demande l\'avis d\'un médecin avant de commencer ou de reprendre le sport, surtout en cas de problème de santé, de blessure, de grossesse ou de traitement. Arrête l\'exercice en cas de douleur, de vertige ou de gêne respiratoire. Les charges proposées sont des points de départ à adapter. Les conseils alimentaires sont indicatifs. Les moins de 18 ans doivent s\'entraîner avec l\'accord et l\'aide d\'un adulte.</p></details>' +
     '<details class="lg"><summary>Confidentialité</summary><p class="why">Il n\'y a ni compte, ni publicité, ni suivi. Ton profil, tes séances, ton poids et tes réglages restent uniquement dans ce navigateur, sur cet appareil. Ils ne sont envoyés nulle part. Tu peux tout effacer avec « Effacer mes données » ou en vidant les données du site dans ton navigateur.</p><p class="why">Deux éléments contactent des services extérieurs : l\'hébergeur de l\'application (GitHub), qui voit ton adresse IP quand tu ouvres l\'app, et YouTube (Google). Les miniatures des vidéos se chargent depuis YouTube quand tu ouvres une fiche, et le lecteur YouTube se charge quand tu touches une vidéo. Google peut alors recevoir des informations techniques comme ton adresse IP. Sans connexion, les vidéos ne s\'affichent pas.</p></details>' +
-    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les animations 3D en boucle viennent de Vital Animations (licence commerciale). Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
+    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les animations 3D en boucle viennent de Vital Animations (licence commerciale). Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Le corps 3D de l\'onglet Séance est « Anatomy study 2.0 Basemesh Human Male Body » par zeroran (Sketchfab, licence CC BY 4.0), simplifié pour mobile. Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
     '</section>';
 }
 function viewData() {
@@ -3468,7 +3498,7 @@ function render() {
   var lg = $('blogo'); if (lg && !lg.getAttribute('src')) lg.setAttribute('src', window.LOGO_URI);
   if (S.onb) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewOnboarding(); return; }
   if (S.home || (!hasData() && !S.active && !S.fresh)) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewHome(); return; }
-  if (!hasData() && !(prof() && !S.active)) { $('meta').textContent = S.active ? metaText() : ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewSeance(); Anim.mount(); return; }
+  if (!hasData() && !(prof() && !S.active)) { $('meta').textContent = S.active ? metaText() : ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewSeance(); Anim.mount(); mountBody(); return; }
   var NOD = !hasData(), TB = NOD ? TABS.filter(function (t) { return t[0] !== 'progres'; }) : TABS;
   if (NOD && S.tab === 'progres') S.tab = 'seance';
   $('meta').textContent = metaText();
@@ -3477,7 +3507,7 @@ function render() {
   var v = (S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData());
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
-  Anim.mount();
+  Anim.mount(); mountBody();
   if (keep >= 0 && $('q')) { $('q').focus(); try { $('q').setSelectionRange(keep, keep); } catch (e) {} }
 }
 function go(t) { S.tab = t; lsSet('cds.tab', t); render(); window.scrollTo(0, 0); }
