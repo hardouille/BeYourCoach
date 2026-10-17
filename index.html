@@ -197,6 +197,7 @@ select.search { appearance: auto; }
 .vid iframe, .vid .vth { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 .vid.vt { aspect-ratio: 1 / 1; max-width: 360px; background: #fff; cursor: pointer; }
 .vid.vt video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
+.card.ss { border-left: 3px solid var(--accent); }
 .vid.sk .skb { flex-direction: column; gap: 10px; background: linear-gradient(160deg, #0C2D2B, #05090B); }
 .vid.sk .skt { font-weight: 700; font-size: 14px; }
 .vid.v { aspect-ratio: 9 / 16; max-width: 260px; }
@@ -2476,6 +2477,7 @@ function focusCard() {
 function viewSeance() {
   if (S.active) return viewWorkout();
   if (S.summary) return viewSummary();
+  if (S.rb) return viewRoutineBuilder();
   var n = now(), st = C.MUSCLES.map(function (m) { return C.muscleStatus(model, m, n); });
   if (!S.sel) S.sel = [];
   var byM = {}; st.forEach(function (s) { byM[s.muscle] = s; });
@@ -2487,7 +2489,7 @@ function viewSeance() {
   }).join('');
   var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche jusqu\'à trois muscles : le premier est le muscle principal, les suivants le complètent. Le point indique la récupération : vert, plus de 48 h.</p></div>' +
     '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + tiles + '</section>';
-  h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + evCard() + planCard() + h;
+  h = '<button class="btn back" data-act="home">← Accueil</button>' + weekCard() + evCard() + planCard() + routinesCard() + h;
   h += companionsSection(byM);
   autoXtra();
   if (!S.sel.length) return h + '<p class="empty">Choisis un muscle pour obtenir ta séance.</p>';
@@ -3381,7 +3383,7 @@ try { if (navigator.storage && navigator.storage.persist) navigator.storage.pers
 function two(n) { return n < 10 ? '0' + n : '' + n; }
 function clock(ms) { var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' : '') + two(m) + ':' + two(s % 60); }
 function restText() {
-  var a = S.active; if (!a || !a.lastOk) return 'Valide une série pour lancer le repos.';
+  var a = S.active; if (!a || !a.lastOk) return a && a.ssNote ? 'Superset : enchaîne l\'exercice suivant, sans repos.' : 'Valide une série pour lancer le repos.';
   var el = Date.now() - a.lastOk, t = (a.restS || 90) * 1000;
   return el >= t ? 'Repos terminé · ' + clock(el) : 'Repos : ' + clock(el) + ' / ' + clock(t);
 }
@@ -3454,11 +3456,51 @@ function altsFor(i) {
     return { e: e, sc: (ce && e.p === ce.p ? 60 : 0) + (e.k === kd ? 30 : 0) + (model.ex[e.n] ? 10 : 0) + C.rank(e.n, e.k, lv) / 10 };
   }).sort(function (x, y) { return y.sc - x.sc; }).slice(0, 6).map(function (o) { return o.e.n; });
 }
+/* ---------- routines (séances personnalisées) et supersets ---------- */
+var ROUT = readJ('cds.routines', []); if (!Array.isArray(ROUT)) ROUT = [];
+function saveRout() { lsSet('cds.routines', JSON.stringify(ROUT.slice(0, 30))); }
+function findRout(id) { return ROUT.filter(function (r) { return r.id === id; })[0]; }
+function routinesCard() {
+  var h = '<section class="sec"><div><h2>Mes routines</h2><p class="sub">Tes propres séances, avec tes exercices, tes séries et tes supersets. Elles se lancent en un geste.</p></div>';
+  h += ROUT.map(function (r) {
+    var n = r.exos.length;
+    return '<article class="card"><div><div class="ename">' + esc(r.name) + '</div><div class="emu">' + n + ' exercice' + (n > 1 ? 's' : '') + ' · ' + esc(r.exos.slice(0, 3).map(function (x) { return x.name; }).join(', ')) + (n > 3 ? '…' : '') + '</div></div>' +
+      '<div class="chips"><button class="chip go" data-act="rbstart" data-k="' + esc(r.id) + '">Démarrer</button><button class="chip" data-act="rbedit" data-k="' + esc(r.id) + '">Modifier</button><button class="chip" data-act="rbdelete" data-k="' + esc(r.id) + '">' + (S.confirm === 'rd' + r.id ? 'Confirmer la suppression' : 'Supprimer') + '</button></div></article>';
+  }).join('');
+  return h + '<button class="btn" data-act="rbnew">+ Créer une routine</button></section>';
+}
+function exoOptions() {
+  return C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (e) { return e.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (e) { return '<option value="' + esc(e.n) + '">' + esc(e.n) + '</option>'; }).join('') + '</optgroup>'; }).join('');
+}
+function viewRoutineBuilder() {
+  var r = S.rb, len = r.exos.length;
+  var rows = r.exos.map(function (x, i) {
+    return '<article class="card' + ((x.ss || (i > 0 && r.exos[i - 1].ss)) ? ' ss' : '') + '"><div class="row"><div><div class="ename">' + esc(x.name) + '</div>' + (x.ss && i < len - 1 ? '<div class="emu">Superset avec le suivant</div>' : '') + '</div>' +
+      '<div class="chips"><button class="chip" data-act="rbup" data-i="' + i + '" aria-label="Monter">↑</button><button class="chip" data-act="rbdn" data-i="' + i + '" aria-label="Descendre">↓</button><button class="chip" data-act="rbdel" data-i="' + i + '">Retirer</button></div></div>' +
+      '<div class="row"><span class="sub">Séries</span><div class="chips"><button class="chip" data-act="rbset" data-i="' + i + '" data-d="-1" aria-label="Une série de moins">−</button><span class="mono">' + x.sets + '</span><button class="chip" data-act="rbset" data-i="' + i + '" data-d="1" aria-label="Une série de plus">+</button></div>' +
+      (i < len - 1 ? '<button class="chip" data-act="rbss" data-i="' + i + '" aria-pressed="' + !!x.ss + '">Superset avec le suivant</button>' : '') + '</div></article>';
+  }).join('');
+  return '<section class="sec"><button class="btn back" data-act="rbcancel">← Retour</button><div><h2>' + (r.id ? 'Modifier la routine' : 'Nouvelle routine') + '</h2><p class="sub">Ajoute tes exercices dans l\'ordre, règle les séries, et relie deux exercices en superset pour les enchaîner sans repos.</p></div>' +
+    (S.rbErr ? '<div class="msg err">' + esc(S.rbErr) + '</div>' : '') +
+    '<label class="lab">Nom de la routine<input class="fin" id="rb-name" type="text" maxlength="40" placeholder="Ex. Push du lundi" value="' + esc(r.name) + '"></label>' + rows +
+    '<select id="rb-add" class="search" aria-label="Ajouter un exercice"><option value="">+ Ajouter un exercice</option>' + exoOptions() + '</select>' +
+    '<button class="btn primary big" data-act="rbsave">Enregistrer la routine</button></section>';
+}
+function startRoutine(r) {
+  var ex = r.exos.filter(function (x) { return LIBMAP[x.name] || model.ex[x.name]; }).map(function (x) { var ne = newExo(x.name, x.sets); ne.ss = !!x.ss; return ne; });
+  if (!ex.length) { S.msg = { err: true, t: 'Les exercices de cette routine ne sont plus disponibles.' }; return; }
+  ex[ex.length - 1].ss = false;
+  S.active = { t0: Date.now(), start: now(), title: r.name, lastOk: null, restS: 90, exos: ex };
+  S.rb = null; S.xtra = []; S.xk = null; S.wf = null; S.wmsg = null; S.summary = null; saveActive(); wake();
+}
+function clearSs(a, i) { [i - 1, i, i + 1].forEach(function (k) { if (a[k]) a[k].ss = false; }); }
 function isBarbell(e) { return /barre/i.test(e.name) && !/EZ|pupitre|araignée|Skullcrusher|poignet/i.test(e.name) && !e.bw; }
 function toolsHTML(e, i) {
   var w0 = 0, hasWu = e.sets.some(function (s) { return s.wu; });
   e.sets.some(function (s) { if (!s.wu && s.w > 0) { w0 = s.w; return true; } return false; });
-  var b = '';
+  var b = '', na = S.active.exos.length;
+  if (i > 0) b += '<button class="chip" data-act="wup" data-i="' + i + '" aria-label="Monter l\'exercice">↑</button>';
+  if (i < na - 1) b += '<button class="chip" data-act="wdn" data-i="' + i + '" aria-label="Descendre l\'exercice">↓</button><button class="chip" data-act="wss" data-i="' + i + '" aria-pressed="' + !!e.ss + '">Superset avec le suivant</button>';
   if (!e.bw && !hasWu && w0 >= 30) b += '<button class="chip" data-act="wwu" data-i="' + i + '">+ Échauffement</button>';
   if (isBarbell(e)) b += '<button class="chip" data-act="wpl" data-i="' + i + '" aria-expanded="' + (S.pl === i) + '">Disques</button>';
   return b ? '<div class="chips">' + b + '</div>' : '';
@@ -3477,10 +3519,11 @@ function viewWorkout() {
   a.exos.forEach(function (e) { e.sets.forEach(function (s) { if (s.wu) return; total++; if (s.ok) okn++; }); });
   var h = '<section class="sec"><div class="card"><div class="lab">En cours · ' + esc(a.title) + '</div><div class="clock" id="tm">' + clock(Date.now() - a.t0) + '</div>' +
     '<div class="row"><span class="sub" id="rest">' + restText() + '</span><span class="mono sub">' + okn + '/' + total + ' séries</span></div>' +
+    (S.rsv ? '<div class="row"><input class="fin" id="rs-name" type="text" maxlength="40" placeholder="Nom de la routine" value="' + esc(S.rsvName == null ? a.title : S.rsvName) + '" aria-label="Nom de la routine"><button class="btn primary" data-act="rsvgo">Enregistrer</button></div>' : '') +
     (S.wmsg ? '<div class="msg err">' + esc(S.wmsg) + '</div>' : '') +
-    '<div class="chips"><button class="chip" data-act="snd" aria-pressed="' + (lsGet('cds.snd') === '1') + '">Son à la fin du repos</button></div><div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
+    '<div class="chips"><button class="chip" data-act="rsv" aria-expanded="' + !!S.rsv + '">Enregistrer comme routine</button><button class="chip" data-act="snd" aria-pressed="' + (lsGet('cds.snd') === '1') + '">Son à la fin du repos</button></div><div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
   a.exos.forEach(function (e, i) {
-    h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
+    h += '<article class="card' + ((e.ss || (i > 0 && a.exos[i - 1].ss)) ? ' ss' : '') + '"><div class="row"><div><div class="ename">' + ((e.ss || (i > 0 && a.exos[i - 1].ss)) ? '<span class="pill up">Superset</span> ' : '') + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
       (S.wy === e.name ? whyHTML(e.name, a.exos.map(function (x) { return x.name; })) : '') +
       (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="lab">Ou choisis librement</div><select class="search repsel" data-i="' + i + '" aria-label="Choisir un autre exercice"><option value="">Un exercice de la bibliothèque…</option>' + C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (x) { return x.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (x) { return '<option value="' + esc(x.n) + '">' + esc(x.n) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' +
         '<div class="lab">Ou écris ton propre exercice</div><div class="fgrid"><input class="fin" id="rep-free" type="text" placeholder="Nom de l\'exercice" aria-label="Nom de ton exercice"><select class="fin" id="rep-mu" aria-label="Muscle travaillé">' + C.MUSCLES.map(function (m) { return '<option' + (m === curMuscle(e.name) ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div><button class="btn" data-act="wrepfree" data-i="' + i + '">Utiliser cet exercice</button>' +
@@ -3609,7 +3652,7 @@ function copyCSV() {
 document.addEventListener('click', function (e) {
   var b = e.target.closest('[data-act]'); if (!b) return;
   var a = b.getAttribute('data-act'), m = b.getAttribute('data-m'), k = b.getAttribute('data-k'), wi = +b.getAttribute('data-i'), wj = +b.getAttribute('data-j');
-  if (a !== 'reset' && a !== 'wabort' && a !== 'wrm') S.confirm = null;
+  if (a !== 'reset' && a !== 'wabort' && a !== 'wrm' && a !== 'rbdelete') S.confirm = null;
   if (a === 'tab') return go(b.getAttribute('data-t'));
   if (['pick', 'swap', 'preset', 'plansel', 'addm', 'aiplan'].indexOf(a) >= 0) S.solo = false;
   if (a === 'pick' && m === injured() && S.sel.indexOf(m) < 0) { S.evwarn = 'Tu as signalé une douleur sur ' + m + ' : on le ménage. Choisis un autre muscle, ou touche « Revenir au programme normal » si c\'est réglé.'; }
@@ -3658,6 +3701,29 @@ document.addEventListener('click', function (e) {
   else if (a === 'wpl') { S.pl = S.pl === wi ? null : wi; }
   else if (a === 'measadd') { measAdd(); }
   else if (a === 'measdel') { MEAS.pop(); lsSet('cds.meas', JSON.stringify(MEAS)); }
+  else if (a === 'wss') { var es = S.active.exos[wi]; es.ss = !es.ss; saveActive(); }
+  else if (a === 'wup' || a === 'wdn') { var ax = S.active.exos, j2 = a === 'wup' ? wi - 1 : wi + 1; if (ax[j2]) { var tmp = ax[wi]; ax[wi] = ax[j2]; ax[j2] = tmp; clearSs(ax, Math.min(wi, j2)); clearSs(ax, Math.max(wi, j2)); S.pl = null; S.rep = null; S.wf = null; saveActive(); } }
+  else if (a === 'rsv') { S.rsv = !S.rsv; }
+  else if (a === 'rsvgo') {
+    var rn = String(S.rsvName == null ? S.active.title : S.rsvName).trim().slice(0, 40);
+    if (!rn) { S.wmsg = 'Donne un nom à ta routine.'; }
+    else { var rx = S.active.exos.map(function (x) { return { name: x.name, sets: Math.max(1, x.sets.filter(function (z) { return !z.wu; }).length), ss: !!x.ss }; }); rx[rx.length - 1].ss = false; ROUT.unshift({ id: String(Date.now()), name: rn, exos: rx }); saveRout(); S.rsv = false; S.rsvName = null; S.wmsg = null; S.msg = { t: 'Routine « ' + rn + ' » enregistrée. Tu la retrouves dans Séance, « Mes routines ».' }; }
+  }
+  else if (a === 'rbnew') { S.rb = { name: '', exos: [] }; S.rbErr = null; window.scrollTo(0, 0); }
+  else if (a === 'rbedit') { var r0 = findRout(k); if (r0) { S.rb = JSON.parse(JSON.stringify(r0)); S.rbErr = null; window.scrollTo(0, 0); } }
+  else if (a === 'rbcancel') { S.rb = null; S.rbErr = null; }
+  else if (a === 'rbup' || a === 'rbdn') { var rr = S.rb.exos, j3 = a === 'rbup' ? wi - 1 : wi + 1; if (rr[j3]) { var t3 = rr[wi]; rr[wi] = rr[j3]; rr[j3] = t3; clearSs(rr, Math.min(wi, j3)); clearSs(rr, Math.max(wi, j3)); } }
+  else if (a === 'rbdel') { S.rb.exos.splice(wi, 1); clearSs(S.rb.exos, wi - 1); }
+  else if (a === 'rbset') { var rx2 = S.rb.exos[wi]; rx2.sets = Math.min(8, Math.max(1, rx2.sets + (+b.getAttribute('data-d')))); }
+  else if (a === 'rbss') { var rx3 = S.rb.exos[wi]; rx3.ss = !rx3.ss; }
+  else if (a === 'rbsave') {
+    var nm2 = String(S.rb.name || '').trim().slice(0, 40);
+    if (!nm2) { S.rbErr = 'Donne un nom à ta routine.'; }
+    else if (!S.rb.exos.length) { S.rbErr = 'Ajoute au moins un exercice.'; }
+    else { var ro = { id: S.rb.id || String(Date.now()), name: nm2, exos: S.rb.exos.map(function (x, i) { return { name: x.name, sets: x.sets, ss: !!x.ss && i < S.rb.exos.length - 1 }; }) }; var ix = ROUT.map(function (z) { return z.id; }).indexOf(ro.id); if (ix >= 0) ROUT[ix] = ro; else ROUT.unshift(ro); saveRout(); S.rb = null; S.rbErr = null; S.msg = { t: 'Routine enregistrée.' }; }
+  }
+  else if (a === 'rbstart') { var r1 = findRout(k); if (r1) { startRoutine(r1); if (S.active) { window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); } } }
+  else if (a === 'rbdelete') { if (S.confirm !== 'rd' + k) S.confirm = 'rd' + k; else { ROUT = ROUT.filter(function (z) { return z.id !== k; }); saveRout(); S.confirm = null; } }
   else if (a === 'legalok') { lsSet('cds.legal', '1'); legalBar(); return; }
   else if (a === 'enter') { S.msg = null; if (!PROFILE && !S.skipped) { S.onb = { next: 'enter' }; S.pf = newPf(); S.pfErr = null; render(); return; } S.home = false; go(S.tab === 'data' ? 'seance' : S.tab); return; }
   else if (a === 'blank') { if (!PROFILE && !S.skipped) { S.onb = { next: 'blank' }; S.pf = newPf(); S.pfErr = null; render(); return; } startBlank(); return; }
@@ -3686,7 +3752,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'anim') { Anim.setPlaying(!Anim.isPlaying()); document.querySelectorAll('.figbox').forEach(function (f) { f.classList.toggle('paused', !Anim.isPlaying()); }); }
   else if (a === 'addx') { var xi = S.xtra.indexOf(k); if (xi >= 0) S.xtra.splice(xi, 1); else S.xtra.push(k); }
   else if (a === 'start') { startWorkout(); window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); }
-  else if (a === 'wset') { var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok && !ss.wu) { S.active.lastOk = Date.now(); S.active.restS = S.active.exos[wi].restS || 90; S.active.rested = false; if (lsGet('cds.snd') === '1') unlockAudio(); } S.wmsg = null; saveActive(); }
+  else if (a === 'wset') { var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok && !ss.wu) { if (S.active.exos[wi].ss) { S.active.lastOk = null; S.active.ssNote = true; } else { S.active.lastOk = Date.now(); S.active.restS = S.active.exos[wi].restS || 90; S.active.rested = false; S.active.ssNote = false; if (lsGet('cds.snd') === '1') unlockAudio(); } } S.wmsg = null; saveActive(); }
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
   else if (a === 'why') S.wy = S.wy === k ? null : k;
   else if (a === 'wrep') { S.rep = S.rep === wi ? null : wi; S.confirm = null; }
@@ -3719,6 +3785,8 @@ document.addEventListener('click', function (e) {
 document.addEventListener('input', function (e) {
   if (e.target.id === 'q') { S.q = e.target.value; render(); return; }
   if (e.target.id === 'chatin') { S.draft = e.target.value; return; }
+  if (e.target.id === 'rb-name' && S.rb) { S.rb.name = e.target.value; return; }
+  if (e.target.id === 'rs-name') { S.rsvName = e.target.value; return; }
   var pm = { 'pf-age': 'age', 'pf-h': 'h', 'pf-w': 'w' }[e.target.id]; if (pm) { S.pf[pm] = e.target.value; return; }
   if (e.target.id === 'wt-in') { S.wtv = e.target.value; return; }
   var rmm = /^pf-rm([wr])-(.+)$/.exec(e.target.id); if (rmm) { S.pf.rm = S.pf.rm || {}; S.pf.rm[rmm[2]] = S.pf.rm[rmm[2]] || {}; S.pf.rm[rmm[2]][rmm[1]] = e.target.value; return; }
@@ -3744,6 +3812,7 @@ document.addEventListener('change', function (e) {
     }
     return;
   }
+  if (e.target.id === 'rb-add') { var rnm = e.target.value; if (rnm && S.rb && S.rb.exos.length < 12) { S.rb.exos.push({ name: rnm, sets: 3, ss: false }); render(); } return; }
   if (e.target.id === 'bkfile') { var bf = e.target.files[0]; if (!bf) return; var br = new FileReader(); br.onload = function () { stageRestore(String(br.result)); render(); }; br.onerror = function () { S.msg = { err: true, t: 'Lecture du fichier impossible.' }; render(); }; br.readAsText(bf); e.target.value = ''; return; }
   if (e.target.id !== 'file' || !e.target.files[0]) return;
   var fr = new FileReader();
