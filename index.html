@@ -689,6 +689,13 @@ function startLoad(e, p, lv, raw) {
   if (!raw) v *= rmFactor(e, p, lv);
   return Math.max(st, Math.round(v / st) * st);
 }
+/* disques à charger par côté pour une charge totale sur une barre */
+function plates(w, bar) {
+  bar = bar || 20; var side = (w - bar) / 2; if (!(side > 0)) return null;
+  var P = [25, 20, 15, 10, 5, 2.5, 1.25], out = [], r = side;
+  P.forEach(function (p) { while (r + 1e-9 >= p) { out.push(p); r -= p; } });
+  return { side: side, plates: out, rest: Math.round(r * 100) / 100 };
+}
 /* séries et reps de départ pour un exercice jamais fait, selon le niveau et les tests */
 function starter(name, kind, bw, p, lv) {
   var t = (p && p.t) || {}, comp = kind === 'C';
@@ -1110,7 +1117,7 @@ var API = {
   register: register, importCSV: importCSV, FREQS: FREQS, GOALS: GOALS, SEXES: SEXES, profileOk: profileOk, estimate: estimate, GROUPS: GROUPS, PAIRS: PAIRS, PRESETS: PRESETS,
   fmtFR: fmtFR, logToRows: logToRows, toCSV: toCSV,
   MUSCLES: MUSCLES, parseCSV: parseCSV, parseDate: parseDate, buildModel: buildModel, canon: canon,
-  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, startLoad: startLoad, RM: RM, e1rm: e1rm, rmClean: rmClean, rmFactor: rmFactor, weekPlan: weekPlan, weekMenu: weekMenu, weightTrend: weightTrend, adjustFor: adjustFor, weightVerdict: weightVerdict, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
+  muscleStatus: muscleStatus, exoStats: exoStats, progress: progress, weekly: weekly, recommend: recommend, method: method, LEVELS: LEVELS, LEVEL_LABEL: LEVEL_LABEL, TESTS: TESTS, bmiInfo: bmiInfo, testLevel: testLevel, histLevel: histLevel, level: level, noviceBlocked: noviceBlocked, starter: starter, startLoad: startLoad, plates: plates, RM: RM, e1rm: e1rm, rmClean: rmClean, rmFactor: rmFactor, weekPlan: weekPlan, weekMenu: weekMenu, weightTrend: weightTrend, adjustFor: adjustFor, weightVerdict: weightVerdict, shopping: shopping, nutrition: nutrition, FOOD: FOOD, needsDeload: needsDeload, VOL: VOL, rank: rank, quota: quota, MAX_EX: MAX_EX,
   nowNaive: nowNaive, fmtDate: fmtDate, fmtDateY: fmtDateY, rel: rel, fmtKg: fmtKg, setLine: setLine, DAY: DAY
 };
 if (typeof module !== 'undefined' && module.exports) module.exports = API; else root.Core = API;
@@ -2508,10 +2515,51 @@ function viewSeance() {
   return h;
 }
 
+var MEAS = readJ('cds.meas', []); if (!Array.isArray(MEAS)) MEAS = [];
+var MFIELDS = [['taille', 'Tour de taille'], ['poitrine', 'Poitrine'], ['hanches', 'Hanches'], ['bras', 'Bras'], ['cuisse', 'Cuisse']];
+function measAdd() {
+  var v = {}, any = false, bad = false;
+  MFIELDS.forEach(function (f) { var el = $('me-' + f[0]); var x = el ? parseFloat(String(el.value).replace(',', '.')) : NaN; if (el && String(el.value).trim() !== '') { if (x >= 20 && x <= 250) { v[f[0]] = Math.round(x * 2) / 2; any = true; } else bad = true; } });
+  if (bad || !any) { S.msg = { err: true, t: bad ? 'Indique chaque mesure en cm, entre 20 et 250.' : 'Indique au moins une mesure.' }; return; }
+  MEAS.push({ t: Date.now(), v: v }); lsSet('cds.meas', JSON.stringify(MEAS.slice(-120))); S.msg = { t: 'Mesures enregistrées.' };
+}
+function measSection() {
+  var rows = MFIELDS.map(function (f) {
+    var pts = MEAS.filter(function (m) { return m.v && m.v[f[0]] != null; });
+    if (!pts.length) return '';
+    var last = pts[pts.length - 1], prev = pts.length > 1 ? pts[pts.length - 2] : null, d = prev ? Math.round((last.v[f[0]] - prev.v[f[0]]) * 10) / 10 : null;
+    return '<div class="mrow"><span>' + f[1] + '</span><span class="mono">' + String(last.v[f[0]]).replace('.', ',') + ' cm</span><span class="mono">' + (d === null ? '' : (d > 0 ? '+' : '') + String(d).replace('.', ',') + ' cm') + '</span></div>';
+  }).join('');
+  return '<section class="sec"><div><h2>Mensurations</h2><p class="sub">Le poids ne dit pas tout : mesure-toi une fois par mois, le matin, de la même façon. Ces valeurs restent sur cet appareil.</p></div>' +
+    (S.msg && S.tab === 'progres' ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
+    (rows ? '<div class="card">' + rows + '<div class="legend">Dernière mesure, et écart avec la précédente.' + (MEAS.length ? ' Dernier enregistrement : ' + new Date(MEAS[MEAS.length - 1].t).toLocaleDateString('fr-FR') + '.' : '') + '</div></div>' : '') +
+    '<div class="card"><div class="fgrid">' + MFIELDS.map(function (f) { return '<label>' + f[1] + '<input class="fin" id="me-' + f[0] + '" type="text" inputmode="decimal" placeholder="cm" aria-label="' + f[1] + ' en cm"></label>'; }).join('') + '</div><div class="row"><button class="btn primary" data-act="measadd">Enregistrer</button>' + (MEAS.length ? '<button class="btn" data-act="measdel">Supprimer la dernière</button>' : '') + '</div></div></section>';
+}
+function weekVol(t0, t1) {
+  var v = 0;
+  model.sessions.forEach(function (se) { if (se.t >= t0 && se.t < t1) se.eo.forEach(function (nm) { se.exos[nm].sets.forEach(function (s) { if (s.t !== 'warmup') v += s.w * s.r; }); }); });
+  return Math.round(v);
+}
+function weekCompare(ws) {
+  var cur = ws[ws.length - 1], prv = ws[ws.length - 2]; if (!prv) return '';
+  var vc = weekVol(cur.t, cur.t + 7 * 864e5), vp = weekVol(prv.t, prv.t + 7 * 864e5);
+  var row = function (lab, a, b, u) { var d = a - b; return '<div class="mrow"><span>' + lab + '</span><span class="mono">' + a.toLocaleString('fr-FR') + u + '</span><span class="mono">' + (b ? 'avant : ' + b.toLocaleString('fr-FR') + u : '') + (d ? ' (' + (d > 0 ? '+' : '') + d.toLocaleString('fr-FR') + ')' : '') + '</span></div>'; };
+  return '<section class="sec"><div><h2>Cette semaine, comparée à la précédente</h2><p class="sub">La semaine en cours n\'est pas finie : le total peut encore monter.</p></div><div class="card">' + row('Séances', cur.sessions, prv.sessions, '') + row('Séries', cur.sets, prv.sets, '') + row('Volume', vc, vp, ' kg') + '</div></section>';
+}
+function recordsSection() {
+  var arr = [];
+  Object.keys(model.ex).forEach(function (n) { var X = model.ex[n], b = null; X.hist.forEach(function (h) { if (!b || h.score > b.score) b = h; }); if (b && b.score > 0) arr.push({ n: n, X: X, b: b }); });
+  arr.sort(function (a, b) { return b.b.t - a.b.t; });
+  if (!arr.length) return '';
+  return '<section class="sec"><div><h2>Mes records</h2><p class="sub">Ton meilleur e1RM (charge estimée pour 1 répétition) par exercice, du plus récent au plus ancien.</p></div><div class="list">' + arr.slice(0, 8).map(function (r) {
+    return '<button class="li" data-act="goto" data-k="' + esc(r.n) + '"><div><div class="ename" style="font-size:14.5px">' + esc(r.n) + '</div><div class="emu">' + C.fmtDateY(r.b.t) + ' · ' + esc(C.setLine(r.b.sets)) + '</div></div><span class="pill up">' + Math.round(r.b.score) + (r.X.bw ? ' reps' : ' kg') + '</span></button>';
+  }).join('') + '</div></section>';
+}
 function viewProgres() {
   var n = now(), ws = C.weekly(model, n, 12), cur = ws[ws.length - 1];
   var prev4 = ws.slice(-5, -1), avgS = prev4.reduce(function (a, w) { return a + w.sessions; }, 0) / 4;
   var h = '<section class="sec"><div><h2>Cette semaine</h2></div><div class="strip"><div class="stat"><b>' + cur.sessions + '</b><span>séances</span></div><div class="stat"><b>' + cur.sets + '</b><span>séries de travail</span></div><div class="stat"><b>' + (Math.round(avgS * 10) / 10).toString().replace('.', ',') + '</b><span>séances / sem. sur 4 sem.</span></div></div></section>';
+  h += weekCompare(ws);
   h += '<section class="sec"><div><h2>Séries par semaine</h2><p class="sub">Le chiffre au-dessus de chaque barre est le nombre de séances. Semaine en cours en pâle.</p></div><div class="card">' + weekChart(ws) + '</div></section>';
   var mx = 24, rows = C.MUSCLES.map(function (m) { return C.muscleStatus(model, m, n); });
   rows.forEach(function (r) { mx = Math.max(mx, r.s7, r.avg4); });
@@ -2527,7 +2575,7 @@ function viewProgres() {
   h += '<section class="sec"><div><h2>Ils progressent</h2><p class="sub">Meilleure séance des 6 dernières semaines contre les 6 précédentes.</p></div>' +
     (p.gains.length ? '<div class="list">' + p.gains.slice(0, 6).map(function (g) { return li(g, false); }).join('') + '</div>' : '<p class="empty">Pas encore assez de séances pour comparer.</p>') + '</section>';
   if (p.plateaus.length) h += '<section class="sec"><div><h2>Ils stagnent</h2><p class="sub">Au moins trois séances récentes, sans progrès sur 6 semaines. Change les répétitions, la tempo ou la variante.</p></div><div class="list">' + p.plateaus.slice(0, 5).map(function (g) { return li(g, true); }).join('') + '</div></section>';
-  return h + historySection();
+  return h + recordsSection() + measSection() + historySection();
 }
 
 function historySection() {
@@ -3294,7 +3342,7 @@ function viewData() {
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
     '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
     (seedCSV.trim() ? '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : effacer aussi mes nouvelles séances' : 'Revenir aux données d\'origine') + '</button></div>' : '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : tout effacer' : 'Effacer mes données') + '</button></div>') + '</div></section>' +
-    '<section class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier workout_data.csv ci-dessus.</li></ol></section>' + exportCard() + legalCard();
+    '<section class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier workout_data.csv ci-dessus.</li></ol></section>' + backupCard() + exportCard() + legalCard();
 }
 
 function legalBar() {
@@ -3316,7 +3364,7 @@ function render() {
   $('meta').textContent = metaText();
   if (S.active) { $('meta').setAttribute('data-act', 'tab'); $('meta').setAttribute('data-t', 'seance'); } else { $('meta').removeAttribute('data-act'); $('meta').removeAttribute('data-t'); }
   $('tabs').innerHTML = TB.map(function (t) { return '<button data-act="tab" data-t="' + t[0] + '"' + (S.tab === t[0] ? ' aria-current="page"' : '') + '><svg viewBox="0 0 24 24" aria-hidden="true">' + t[2] + '</svg>' + t[1] + '</button>'; }).join('');
-  var v = S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData();
+  var v = (S.tab === 'seance' ? backupNag() : '') + (S.tab === 'seance' ? viewSeance() : S.tab === 'progres' ? viewProgres() : S.tab === 'exos' ? viewExos() : S.tab === 'repas' ? viewRepas() : S.tab === 'coach' ? viewCoach() : viewData());
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
   Anim.mount();
@@ -3329,12 +3377,25 @@ var wl = null;
 function wake() { try { if (navigator.wakeLock && S.active && document.visibilityState === 'visible') navigator.wakeLock.request('screen').then(function (l) { wl = l; }).catch(function () {}); } catch (e) {} }
 function unwake() { try { if (wl) { wl.release(); wl = null; } } catch (e) {} }
 document.addEventListener('visibilitychange', wake);
+try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
 function two(n) { return n < 10 ? '0' + n : '' + n; }
 function clock(ms) { var s = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return (h ? h + ':' : '') + two(m) + ':' + two(s % 60); }
-function restText() { return S.active && S.active.lastOk ? 'Repos : ' + clock(Date.now() - S.active.lastOk) : 'Valide une série pour lancer le repos.'; }
+function restText() {
+  var a = S.active; if (!a || !a.lastOk) return 'Valide une série pour lancer le repos.';
+  var el = Date.now() - a.lastOk, t = (a.restS || 90) * 1000;
+  return el >= t ? 'Repos terminé · ' + clock(el) : 'Repos : ' + clock(el) + ' / ' + clock(t);
+}
+var AUD = null;
+function unlockAudio() { try { var AC = window.AudioContext || window.webkitAudioContext; if (!AC) return; if (!AUD) AUD = new AC(); if (AUD.state === 'suspended') AUD.resume(); } catch (e) {} }
+function beep() { try { if (!AUD) return; var o = AUD.createOscillator(), g = AUD.createGain(); o.frequency.value = 880; g.gain.value = .08; o.connect(g); g.connect(AUD.destination); o.start(); setTimeout(function () { try { o.stop(); } catch (e) {} }, 350); } catch (e) {} }
+function restTick() {
+  var a = S.active; if (!a || !a.lastOk || a.rested) return;
+  if (Date.now() - a.lastOk >= (a.restS || 90) * 1000) { a.rested = true; try { if (navigator.vibrate) navigator.vibrate([250, 120, 250]); } catch (e) {} if (lsGet('cds.snd') === '1') beep(); }
+}
 function metaText() { return S.active ? '● ' + clock(Date.now() - S.active.t0) : model.sessions.length + ' séances · ' + C.rel(model.last, now()); }
 setInterval(function () {
   if (!S.active) return;
+  restTick();
   var t = $('tm'), r = $('rest'), m = $('meta');
   if (t) t.textContent = clock(Date.now() - S.active.t0);
   if (r) r.textContent = restText();
@@ -3345,9 +3406,9 @@ if (S.active) wake();
 function startWorkout() {
   var rec = C.recommend(model, SEL(), now(), ropts());
   if (!rec.items.length && !S.xtra.length) return;
-  S.active = { t0: Date.now(), start: now(), title: SEL().join(' + '), lastOk: null, exos: rec.items.map(function (it) {
+  S.active = { t0: Date.now(), start: now(), title: SEL().join(' + '), lastOk: null, restS: 90, exos: rec.items.map(function (it) {
     var sets = [], i; for (i = 0; i < it.sets; i++) sets.push({ w: it.w > 0 ? it.w : 0, r: it.reps, ok: false });
-    return { name: it.name, bw: it.bw, last: it.lastLine, sets: sets, rest: it.restTxt, rir: it.rir };
+    return { name: it.name, bw: it.bw, last: it.lastLine, sets: sets, rest: it.restTxt, rir: it.rir, restS: it.rest ? Math.round((it.rest[0] + it.rest[1]) / 2) : 90 };
   }) };
   S.xtra.forEach(function (nm) {
     var e = LIBMAP[nm]; if (!e || S.active.exos.some(function (x) { return x.name === nm; })) return;
@@ -3363,7 +3424,7 @@ function newExo(nm, nsets) {
   else if (e && !e.bw && pr) { w = C.startLoad(e, pr, lv); hint = pr.rm && C.rmFactor(e, pr, lv) !== 1 ? 'Charge de départ déduite de tes charges de référence, avec des reps en réserve : ajuste-la selon ton ressenti.' : 'Charge de départ estimée d\'après ton poids (' + String(pr.w).replace('.', ',') + ' kg)' + (lv === 'debutant' ? ', avec 3 reps en réserve' : '') + ' : ajuste-la selon ton ressenti.'; }
   else if (e && !e.bw) hint = 'Première fois : choisis une charge légère, avec 3 reps en réserve.';
   var sets = []; for (var i = 0; i < ns; i++) sets.push({ w: w, r: r, ok: false });
-  return { name: nm, bw: e ? e.bw : !!(X && X.bw), last: last, hint: hint, sets: sets };
+  return { name: nm, bw: e ? e.bw : !!(X && X.bw), last: last, hint: hint, sets: sets, restS: e && e.k === 'C' ? 120 : 75 };
 }
 function whyHTML(name, names) {
   var e = LIBMAP[name], X = model.ex[name], m = e ? e.m : X && X.muscle, kd = e ? e.k : X && X.kind, lv = LV(), pr = prof() || {}, L = [], main = SEL()[0];
@@ -3393,24 +3454,43 @@ function altsFor(i) {
     return { e: e, sc: (ce && e.p === ce.p ? 60 : 0) + (e.k === kd ? 30 : 0) + (model.ex[e.n] ? 10 : 0) + C.rank(e.n, e.k, lv) / 10 };
   }).sort(function (x, y) { return y.sc - x.sc; }).slice(0, 6).map(function (o) { return o.e.n; });
 }
+function isBarbell(e) { return /barre/i.test(e.name) && !/EZ|pupitre|araignée|Skullcrusher|poignet/i.test(e.name) && !e.bw; }
+function toolsHTML(e, i) {
+  var w0 = 0, hasWu = e.sets.some(function (s) { return s.wu; });
+  e.sets.some(function (s) { if (!s.wu && s.w > 0) { w0 = s.w; return true; } return false; });
+  var b = '';
+  if (!e.bw && !hasWu && w0 >= 30) b += '<button class="chip" data-act="wwu" data-i="' + i + '">+ Échauffement</button>';
+  if (isBarbell(e)) b += '<button class="chip" data-act="wpl" data-i="' + i + '" aria-expanded="' + (S.pl === i) + '">Disques</button>';
+  return b ? '<div class="chips">' + b + '</div>' : '';
+}
+function platesHTML(e) {
+  var seen = {}, rows = '';
+  e.sets.forEach(function (s) {
+    if (!(s.w > 20) || seen[s.w]) return; seen[s.w] = 1;
+    var p = C.plates(s.w, 20); if (!p) return;
+    rows += '<div class="hist">' + kg(s.w) + ' kg : barre de 20 kg + par côté ' + (p.plates.length ? p.plates.map(kg).join(' + ') : '—') + (p.rest > 0.01 ? ' (il manque ' + kg(p.rest * 2) + ' kg)' : '') + '</div>';
+  });
+  return '<div class="msg tip"><div class="lab">Disques à charger</div>' + (rows || '<div class="hist">Charge supérieure à 20 kg pour afficher les disques.</div>') + '<div class="legend">Par côté, avec des disques de 25, 20, 15, 10, 5, 2,5 et 1,25 kg et une barre de 20 kg.</div></div>';
+}
 function viewWorkout() {
   var a = S.active, total = 0, okn = 0;
-  a.exos.forEach(function (e) { e.sets.forEach(function (s) { total++; if (s.ok) okn++; }); });
+  a.exos.forEach(function (e) { e.sets.forEach(function (s) { if (s.wu) return; total++; if (s.ok) okn++; }); });
   var h = '<section class="sec"><div class="card"><div class="lab">En cours · ' + esc(a.title) + '</div><div class="clock" id="tm">' + clock(Date.now() - a.t0) + '</div>' +
     '<div class="row"><span class="sub" id="rest">' + restText() + '</span><span class="mono sub">' + okn + '/' + total + ' séries</span></div>' +
     (S.wmsg ? '<div class="msg err">' + esc(S.wmsg) + '</div>' : '') +
-    '<div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
+    '<div class="chips"><button class="chip" data-act="snd" aria-pressed="' + (lsGet('cds.snd') === '1') + '">Son à la fin du repos</button></div><div class="row"><button class="btn primary" data-act="wfin">Terminer l\'entraînement</button><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div></div></section>';
   a.exos.forEach(function (e, i) {
     h += '<article class="card"><div class="row"><div><div class="ename">' + esc(e.name) + '</div>' + (e.rest ? '<div class="emu">Repos ' + esc(e.rest) + ' · réserve ' + esc(e.rir) + '</div>' : '') + '</div><div class="chips"><button class="btn" data-act="wfiche" data-k="' + esc(e.name) + '">' + (S.wf === e.name ? 'Masquer' : 'Fiche') + '</button><button class="btn" data-act="wadd" data-i="' + i + '">+ Série</button><button class="btn" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="btn" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div></div>' +
       (S.wy === e.name ? whyHTML(e.name, a.exos.map(function (x) { return x.name; })) : '') +
       (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="lab">Ou choisis librement</div><select class="search repsel" data-i="' + i + '" aria-label="Choisir un autre exercice"><option value="">Un exercice de la bibliothèque…</option>' + C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (x) { return x.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (x) { return '<option value="' + esc(x.n) + '">' + esc(x.n) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' +
         '<div class="lab">Ou écris ton propre exercice</div><div class="fgrid"><input class="fin" id="rep-free" type="text" placeholder="Nom de l\'exercice" aria-label="Nom de ton exercice"><select class="fin" id="rep-mu" aria-label="Muscle travaillé">' + C.MUSCLES.map(function (m) { return '<option' + (m === curMuscle(e.name) ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div><button class="btn" data-act="wrepfree" data-i="' + i + '">Utiliser cet exercice</button>' +
         '<div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
+      toolsHTML(e, i) + (S.pl === i ? platesHTML(e) : '') +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
       (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
       '<div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' +
       e.sets.map(function (s, j) {
-        return '<div class="sg"><span class="mono">' + (j + 1) + '</span>' +
+        return '<div class="sg"><span class="mono">' + (s.wu ? 'É' : (j + 1 - e.sets.filter(function (z) { return z.wu; }).length)) + '</span>' +
           '<input class="in" id="w-' + i + '-' + j + '" inputmode="decimal" data-f="w" data-i="' + i + '" data-j="' + j + '" value="' + s.w + '" aria-label="Charge en kg, série ' + (j + 1) + '">' +
           '<input class="in" id="r-' + i + '-' + j + '" inputmode="numeric" data-f="r" data-i="' + i + '" data-j="' + j + '" value="' + s.r + '" aria-label="Répétitions, série ' + (j + 1) + '">' +
           '<button class="btn ck" data-act="wset" data-i="' + i + '" data-j="' + j + '" aria-pressed="' + !!s.ok + '" aria-label="Valider la série ' + (j + 1) + '">✓</button>' +
@@ -3423,7 +3503,7 @@ function viewWorkout() {
 function finishWorkout() {
   var a = S.active, exos = [];
   a.exos.forEach(function (e) {
-    var ss = e.sets.filter(function (s) { return s.ok && s.r > 0; }).map(function (s) { return { w: s.w > 0 ? s.w : 0, r: Math.round(s.r) }; });
+    var ss = e.sets.filter(function (s) { return s.ok && s.r > 0 && !s.wu; }).map(function (s) { return { w: s.w > 0 ? s.w : 0, r: Math.round(s.r) }; });
     if (ss.length) exos.push({ name: e.name, sets: ss });
   });
   if (!exos.length) { S.wmsg = 'Valide au moins une série avec ✓ avant de terminer.'; return; }
@@ -3449,9 +3529,57 @@ function viewSummary() {
     '<div class="strip"><div class="stat"><b>' + clock(s.dur) + '</b><span>durée</span></div><div class="stat"><b>' + s.sets + '</b><span>séries validées</span></div><div class="stat"><b>' + s.vol.toLocaleString('fr-FR') + '</b><span>kg soulevés au total</span></div></div>' +
     (s.prs.length ? '<div class="card"><div class="lab">Nouveaux records e1RM</div>' + s.prs.map(function (n) { return '<div class="ename" style="font-size:14.5px">' + esc(n) + '</div>'; }).join('') + '</div>' : '') +
     '<div class="msg' + (s.saved ? '' : ' err') + '">' + (s.saved ? 'Séance ajoutée à ton historique. Tes courbes et tes prochaines charges en tiennent compte.' : 'Séance prise en compte, mais ce navigateur n\'a pas pu la garder. Exporte le CSV maintenant.') + '</div>' +
-    '<div class="row"><button class="btn primary" data-act="tab" data-t="data">Exporter le CSV</button><button class="btn" data-act="sumclose">Fermer</button></div></section>' + adviceCard('Pour finir');
+    '<div class="row"><button class="btn primary" data-act="bk">Sauvegarder mes données</button><button class="btn" data-act="tab" data-t="data">Exporter le CSV</button><button class="btn" data-act="sumclose">Fermer</button></div></section>' + adviceCard('Pour finir');
 }
 
+/* ---------- sauvegarde complète ---------- */
+var BKSKIP = { 'cds.nav': 1, 'cds.tab': 1, 'cds.active': 1, 'cds.ai': 1, 'cds.chat': 1, 'cds.lastbackup': 1 };
+function backupObj() {
+  var d = {};
+  try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('cds.') === 0 && !BKSKIP[k]) d[k] = localStorage.getItem(k); } } catch (e) {}
+  return { app: 'BeYourCoach', v: 1, date: new Date().toISOString(), data: d };
+}
+function daysSinceBackup() { var t = +lsGet('cds.lastbackup'); return t ? Math.max(0, Math.floor((Date.now() - t) / 864e5)) : null; }
+function backupNag() {
+  if (S.active || !model || model.sessions.length < 3) return '';
+  var d = daysSinceBackup(); if (d !== null && d < 14) return '';
+  return '<div class="msg tip">' + (d === null ? 'Tu n\'as pas encore sauvegardé tes données.' : 'Dernière sauvegarde il y a ' + d + ' jours.') + ' Elles ne sont que sur cet appareil : sauvegarde-les pour ne rien perdre. <button class="btn" data-act="bk">Sauvegarder</button></div>';
+}
+function backupFile() {
+  var txt = JSON.stringify(backupObj()), fn = 'beyourcoach-sauvegarde-' + new Date().toISOString().slice(0, 10) + '.json';
+  var done = function () { lsSet('cds.lastbackup', String(Date.now())); S.msg = { t: 'Sauvegarde créée : ' + fn + '. Garde-la dans un endroit sûr (mail, cloud).' }; S.bkText = null; render(); };
+  try {
+    var f = new File([txt], fn, { type: 'application/json' });
+    if (navigator.canShare && navigator.canShare({ files: [f] })) { navigator.share({ files: [f], title: 'BeYourCoach' }).then(done, function () {}); return; }
+  } catch (e) {}
+  try {
+    var u = URL.createObjectURL(new Blob([txt], { type: 'application/json' })), a = document.createElement('a');
+    a.href = u; a.download = fn; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(function () { URL.revokeObjectURL(u); }, 3000); done();
+  } catch (e) { S.msg = { err: true, t: 'Ce navigateur bloque le téléchargement. Le texte de la sauvegarde est affiché ci-dessous : copie-le et garde-le dans un fichier.' }; S.bkText = txt; render(); }
+}
+function stageRestore(txt) {
+  var o = null; try { o = JSON.parse(txt); } catch (e) { o = null; }
+  if (!o || o.app !== 'BeYourCoach' || !o.data || typeof o.data !== 'object') { S.bk = null; S.msg = { err: true, t: 'Ce fichier n\'est pas une sauvegarde BeYourCoach.' }; return; }
+  var n = 0; try { n = JSON.parse(o.data['cds.log'] || '[]').length; } catch (e) { n = 0; }
+  S.bk = o; S.bkInfo = { date: o.date, n: n }; S.msg = null;
+}
+function applyRestore() {
+  var o = S.bk; if (!o) return;
+  try {
+    var rm = [], i; for (i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('cds.') === 0 && !BKSKIP[k]) rm.push(k); }
+    rm.forEach(function (k) { localStorage.removeItem(k); });
+    Object.keys(o.data).forEach(function (k) { if (k.indexOf('cds.') === 0 && !BKSKIP[k] && typeof o.data[k] === 'string') localStorage.setItem(k, o.data[k]); });
+    location.reload();
+  } catch (e) { S.msg = { err: true, t: 'Restauration impossible dans ce navigateur.' }; }
+}
+function backupCard() {
+  var d = daysSinceBackup();
+  return '<section class="sec"><div class="lab">Sauvegarde complète</div><div class="drop"><div class="ename">Garde tout en sécurité</div><div class="legend">Profil, séances, import CSV, poids, repas, mensurations et réglages, dans un seul fichier. ' + (d === null ? 'Aucune sauvegarde faite pour l\'instant.' : 'Dernière sauvegarde : ' + (d === 0 ? 'aujourd\'hui' : 'il y a ' + d + ' jour' + (d > 1 ? 's' : '')) + '.') + '</div>' +
+    '<div class="row"><button class="btn primary" data-act="bk">Créer une sauvegarde</button><label class="btn">Restaurer…<input id="bkfile" type="file" hidden accept=".json,application/json"></label></div>' +
+    (S.bk ? '<div class="msg err">Restaurer la sauvegarde du ' + esc(String(S.bkInfo.date || '').slice(0, 10)) + ' (' + S.bkInfo.n + ' séance' + (S.bkInfo.n > 1 ? 's' : '') + ') ? Elle remplace toutes les données de cet appareil.<div class="row"><button class="btn primary" data-act="bkgo">Confirmer la restauration</button><button class="btn" data-act="bkno">Annuler</button></div></div>' : '') +
+    (S.bkText ? '<textarea class="csv" readonly>' + esc(S.bkText) + '</textarea>' : '') + '</div></section>';
+}
 /* ---------- export ---------- */
 function exportText() { return C.toCSV(baseRows, C.logToRows(log)); }
 function exportCard() {
@@ -3522,6 +3650,14 @@ document.addEventListener('click', function (e) {
     else { lsDel('cds.csv'); lsDel('cds.log'); lsDel('cds.active'); S.active = null; baseRows = seedCSV.trim() ? C.parseCSV(seedCSV) : []; log = []; rebuild(); S.sel = null; S.confirm = null; S.msg = { t: seedCSV.trim() ? 'Données d\'origine restaurées.' : 'Données effacées.' }; }
   }
   else if (a === 'home') { S.onb = null; if (!S.active) S.home = true; else go('seance'); S.msg = null; }
+  else if (a === 'bk') { backupFile(); return; }
+  else if (a === 'bkgo') { applyRestore(); }
+  else if (a === 'bkno') { S.bk = null; }
+  else if (a === 'snd') { var so = lsGet('cds.snd') === '1'; lsSet('cds.snd', so ? '0' : '1'); if (!so) { unlockAudio(); beep(); } }
+  else if (a === 'wwu') { var ew = S.active.exos[wi], w0 = 0; ew.sets.some(function (s0) { if (!s0.wu && s0.w > 0) { w0 = s0.w; return true; } return false; }); if (w0 >= 30) { var bar0 = /barre/i.test(ew.name) ? 20 : 0, mk = function (f, r) { var w = Math.round(w0 * f / 2.5) * 2.5; if (bar0 && w < bar0) w = bar0; return { w: w, r: r, ok: false, wu: true }; }; ew.sets = [mk(.4, 8), mk(.6, 5), mk(.8, 3)].filter(function (s1, i1, a1) { return i1 === 0 || s1.w > a1[i1 - 1].w; }).concat(ew.sets); saveActive(); } }
+  else if (a === 'wpl') { S.pl = S.pl === wi ? null : wi; }
+  else if (a === 'measadd') { measAdd(); }
+  else if (a === 'measdel') { MEAS.pop(); lsSet('cds.meas', JSON.stringify(MEAS)); }
   else if (a === 'legalok') { lsSet('cds.legal', '1'); legalBar(); return; }
   else if (a === 'enter') { S.msg = null; if (!PROFILE && !S.skipped) { S.onb = { next: 'enter' }; S.pf = newPf(); S.pfErr = null; render(); return; } S.home = false; go(S.tab === 'data' ? 'seance' : S.tab); return; }
   else if (a === 'blank') { if (!PROFILE && !S.skipped) { S.onb = { next: 'blank' }; S.pf = newPf(); S.pfErr = null; render(); return; } startBlank(); return; }
@@ -3550,7 +3686,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'anim') { Anim.setPlaying(!Anim.isPlaying()); document.querySelectorAll('.figbox').forEach(function (f) { f.classList.toggle('paused', !Anim.isPlaying()); }); }
   else if (a === 'addx') { var xi = S.xtra.indexOf(k); if (xi >= 0) S.xtra.splice(xi, 1); else S.xtra.push(k); }
   else if (a === 'start') { startWorkout(); window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); }
-  else if (a === 'wset') { var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok) S.active.lastOk = Date.now(); S.wmsg = null; saveActive(); }
+  else if (a === 'wset') { var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok && !ss.wu) { S.active.lastOk = Date.now(); S.active.restS = S.active.exos[wi].restS || 90; S.active.rested = false; if (lsGet('cds.snd') === '1') unlockAudio(); } S.wmsg = null; saveActive(); }
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
   else if (a === 'why') S.wy = S.wy === k ? null : k;
   else if (a === 'wrep') { S.rep = S.rep === wi ? null : wi; S.confirm = null; }
@@ -3608,6 +3744,7 @@ document.addEventListener('change', function (e) {
     }
     return;
   }
+  if (e.target.id === 'bkfile') { var bf = e.target.files[0]; if (!bf) return; var br = new FileReader(); br.onload = function () { stageRestore(String(br.result)); render(); }; br.onerror = function () { S.msg = { err: true, t: 'Lecture du fichier impossible.' }; render(); }; br.readAsText(bf); e.target.value = ''; return; }
   if (e.target.id !== 'file' || !e.target.files[0]) return;
   var fr = new FileReader();
   fr.onload = function () {
