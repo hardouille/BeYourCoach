@@ -2580,25 +2580,26 @@ function bodyStates() { var o = {}; C.MUSCLES.forEach(function (m) { o[m] = C.mu
 function bodyFile() { var p = prof(); return p && p.sex === 'F' ? 'body_f.bin' : 'body.bin'; }
 function mountBody() {
   var slot = $('bslot'); if (!slot || BODY.failed) return;
+  if (!BODY.inst && lsGet('cds.b3d') === '1') { BODY.failed = true; render(); return; }
   var want = bodyFile();
   if (BODY.inst && BODY.inst.ready && BODY.inst.url === want) {
     var cv = BODY.inst.canvas; if (cv.parentNode !== slot) { var ld = slot.querySelector('.ld'); if (ld) ld.remove(); slot.insertBefore(cv, slot.firstChild); }
     BODY.inst.resize(); BODY.inst.set(bodyStates(), S.sel.slice()); return;
   }
   if (BODY.loading) return;
-  BODY.loading = true;
+  BODY.loading = true; lsSet('cds.b3d', '1');
   var wgl = false; try { var tc = document.createElement('canvas'); wgl = !!(tc.getContext('webgl2') || tc.getContext('webgl')); } catch (e) {}
   if (!wgl) { BODY.failed = true; BODY.loading = false; render(); return; }
   (window.THREE ? Promise.resolve() : loadScriptOnce('vendor/three.min.js')).then(function () { return window.BYCBody ? 0 : loadScriptOnce('body3d.js'); }).then(function () {
     if (!BODY.inst) {
       var cv = document.createElement('canvas'); cv.setAttribute('aria-label', 'Corps humain en 3D : touche un muscle');
-      BODY.inst = new BYCBody.Body(cv, { onPick: function (n) { var bt = document.createElement('button'); bt.setAttribute('data-act', 'pick'); bt.setAttribute('data-m', n); bt.hidden = true; document.body.appendChild(bt); bt.click(); bt.remove(); } });
+      BODY.inst = new BYCBody.Body(cv, { onFail: function () { BODY.failed = true; lsSet('cds.b3d', '1'); render(); }, onPick: function (n) { var bt = document.createElement('button'); bt.setAttribute('data-act', 'pick'); bt.setAttribute('data-m', n); bt.hidden = true; document.body.appendChild(bt); bt.click(); bt.remove(); } });
     }
     return BODY.inst.load(want);
-  }).then(function () { BODY.loading = false; mountBody(); }).catch(function () { BODY.failed = true; BODY.loading = false; render(); });
+  }).then(function () { BODY.loading = false; mountBody(); setTimeout(function () { if (BODY.inst && BODY.inst.ready && !BODY.failed) lsSet('cds.b3d', '0'); }, 1500); }).catch(function () { BODY.failed = true; BODY.loading = false; render(); });
 }
 function bodyHTML(byM) {
-  if (BODY.failed) return silhouetteHTML(byM);
+  if (BODY.failed) return silhouetteHTML(byM) + '<div class="row" style="justify-content:center"><button class="chip" data-act="b3dretry">Essayer le corps 3D</button></div>';
   return '<div class="silo"><div class="stage3d" id="bslot"><span class="ld">Chargement du corps 3D…</span></div>' +
     '<div class="lg"><span><i style="background:var(--crit)"></i>Choisi</span><span><i style="background:var(--good)"></i>Reposé</span><span><i style="background:var(--warn)"></i>Récupère</span><span><i style="background:var(--muted);opacity:.6"></i>Jamais fait</span></div>' +
     '<p class="sub" style="margin:0;text-align:center">' + (S.sel.length ? 'Sélection : <b>' + S.sel.join(', ') + '</b>' : 'Touche un muscle (jusqu\'à 3). Glisse pour tourner.') + '</p></div>';
@@ -3454,7 +3455,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.61';
+var APP_VER = 'v0.62';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3957,6 +3958,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'wopen') { S.active.cur = wi; saveActive(); var oj = 0; S.active.exos[wi].sets.some(function (z, zj) { if (!z.ok) { oj = zj; return true; } return false; }); setTimeout(function () { var el = $('w-' + wi + '-' + oj); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); }
   else if (a === 'fold') { S.open = S.open || {}; S.open[k] = !S.open[k]; }
   else if (a === 'pt') { S.pt = k; }
+  else if (a === 'b3dretry') { lsSet('cds.b3d', '0'); BODY.failed = false; BODY.loading = false; }
   else if (a === 'theme') { lsSet('cds.theme', b.getAttribute('data-v')); applyTheme(); }
   else if (a === 'today') { var tp = todayPick((function () { var o = {}; C.MUSCLES.forEach(function (m) { o[m] = C.muscleStatus(model, m, now()); }); return o; })()); if (tp) { S.sel = tp.p[1].slice(); S.done = {}; S.xtra = []; S.xk = null; startWorkout(); window.scrollTo(0, 0); } }
   else if (a === 'upd') {

@@ -9,12 +9,12 @@
 
   function Body(canvas, opts) {
     var self = this; opts = opts || {};
-    this.canvas = canvas; this.states = {}; this.sel = []; this.onPick = opts.onPick || null; this.ready = false;
+    this.canvas = canvas; this.states = {}; this.sel = []; this.onPick = opts.onPick || null; this.onFail = opts.onFail || null; this.ready = false;
     this.az = 0; this.el = 4; this.dist = 4.5; this.auto = false; this.dirty = true;
     this.base = hex(0xaeb2b8); this.sc = { ready: hex(0x3fbf72), recup: hex(0xe8a23a), fatigue: hex(0xe0584a), none: hex(0xaeb2b8) };
     this.selC = hex(0xe5402c);
     var r = this.r = new T.WebGLRenderer({ canvas: canvas, antialias: true, alpha: true, preserveDrawingBuffer: !!opts.keep });
-    r.setClearColor(0, 0); r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1));
+    r.setClearColor(0, 0); r.setPixelRatio(Math.min(1.5, window.devicePixelRatio || 1));
     var s = this.scene = new T.Scene();
     s.add(new T.HemisphereLight(0xe6eaee, 0x4a4f55, .7));
     var k = new T.DirectionalLight(0xffffff, .95); k.position.set(2, 3.5, 3.5); s.add(k);
@@ -40,7 +40,7 @@
     canvas.addEventListener('wheel', function (e) { e.preventDefault(); self.dist = Math.max(2.2, Math.min(6, self.dist * (1 + e.deltaY * .001))); self.dirty = true; }, { passive: false });
     var loop = function () {
       if (self.auto) { self.az += .006; self.dirty = true; }
-      if (self.dirty && self.ready) { self.dirty = false; self.draw(); }
+      if (self.dirty && self.ready) { self.dirty = false; try { self.draw(); } catch (e) { self.ready = false; if (self.onFail) self.onFail(e); } }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -54,52 +54,28 @@
       var h = new Uint32Array(buf, 0, 2), nV = h[0], nF = h[1];
       var q = new Int16Array(buf, 8, nV * 3), pos = new Float32Array(nV * 3), i;
       for (i = 0; i < pos.length; i++) pos[i] = q[i] / 16384;
-      var io = 8 + nV * 6, idx = new Uint16Array(buf, io, nF * 3), lab = new Uint8Array(buf, io + nF * 6, nV);
+      var io = 8 + nV * 6, idx = new Uint16Array(buf, io, nF * 3), lo = io + nF * 6, lab = new Uint8Array(buf, lo, nV), lab2 = new Uint8Array(buf, lo + nV, nV), wt = new Uint8Array(buf, lo + nV * 2, nV);
       var g = new T.BufferGeometry(); g.setAttribute('position', new T.BufferAttribute(pos, 3)); g.setIndex(new T.BufferAttribute(idx, 1)); g.computeVertexNormals();
-      self.nV = nV; self.idx = idx; self.lab = lab; self.col = new Float32Array(nV * 3); g.setAttribute('color', new T.BufferAttribute(self.col, 3));
+      self.nV = nV; self.idx = idx; self.lab = lab; self.lab2 = lab2; self.wt = wt; self.col = new Float32Array(nV * 3); g.setAttribute('color', new T.BufferAttribute(self.col, 3));
       if (self.mesh) { self.scene.remove(self.mesh); self.geo.dispose(); }
       self.geo = g; self.mesh = new T.Mesh(g, self.mat); self.scene.add(self.mesh);
-      self.soften(); self.paint(); self.ready = true; self.dirty = true;
+      self.W = 1; self.paint(); self.ready = true; self.dirty = true;
     });
-  };
-  /* poids par muscle lissés sur le maillage pour des frontières douces */
-  Body.prototype.soften = function () {
-    var nV = this.nV, idx = this.idx, lab = this.lab, i, j, it;
-    var deg = new Uint32Array(nV + 1);
-    for (i = 0; i < idx.length; i++) deg[idx[i] + 1] += 2;
-    for (i = 0; i < nV; i++) deg[i + 1] += deg[i];
-    var fill = deg.slice(0, nV), adj = new Uint32Array(deg[nV]);
-    for (i = 0; i < idx.length; i += 3) for (j = 0; j < 3; j++) { var a = idx[i + j], b = idx[i + (j + 1) % 3], c = idx[i + (j + 2) % 3]; adj[fill[a]++] = b; adj[fill[a]++] = c; }
-    var W = new Float32Array(nV * NM), W2 = new Float32Array(nV * NM);
-    for (i = 0; i < nV; i++) W[i * NM + lab[i]] = 1;
-    for (it = 0; it < 7; it++) {
-      for (i = 0; i < nV; i++) {
-        var s = deg[i], e = deg[i + 1], n = e - s, o = i * NM, m;
-        for (m = 0; m < NM; m++) W2[o + m] = 0;
-        for (j = s; j < e; j++) { var p = adj[j] * NM; for (m = 0; m < NM; m++) W2[o + m] += W[p + m]; }
-        for (m = 0; m < NM; m++) W2[o + m] = .4 * W[o + m] + .6 * (n ? W2[o + m] / n : 0);
-      }
-      var t = W; W = W2; W2 = t;
-    }
-    this.W = W;
   };
   Body.prototype.paint = function () {
     if (!this.W) return;
-    var nV = this.nV, W = this.W, col = this.col, b = this.base, selSet = {}, tint = [], m, i;
+    var nV = this.nV, col = this.col, b = this.base, selSet = {}, tint = [[0, 0, 0, 0]], m, i;
     this.sel.forEach(function (n) { selSet[n] = 1; });
     for (m = 1; m < NM; m++) {
       var nm = NAMES[m], c, a;
       if (selSet[nm]) { c = this.selC; a = .95; }
-      else { var st = this.states[nm] || 'none'; c = this.sc[st] || this.sc.none; a = st === "none" ? 0 : .6; }
-      tint.push([c.r, c.g, c.b, a]);
+      else { var st = this.states[nm] || 'none'; c = this.sc[st] || this.sc.none; a = st === 'none' ? 0 : .6; }
+      tint.push([c.r - b.r, c.g - b.g, c.b - b.b, a]);
     }
+    var l1 = this.lab, l2 = this.lab2, wt = this.wt;
     for (i = 0; i < nV; i++) {
-      var o = i * NM, r = b.r, g = b.g, bl = b.b, wsum = 0, rr = 0, gg = 0, bb = 0;
-      for (m = 1; m < NM; m++) {
-        var w = W[o + m]; if (w < .02) continue; var t = tint[m - 1], k = w * t[3];
-        rr += (t[0] - b.r) * k; gg += (t[1] - b.g) * k; bb += (t[2] - b.b) * k;
-      }
-      col[i * 3] = r + rr; col[i * 3 + 1] = g + gg; col[i * 3 + 2] = bl + bb;
+      var w1 = wt[i] / 255, t1 = tint[l1[i]], t2 = tint[l2[i]], k1 = w1 * t1[3], k2 = (1 - w1) * t2[3];
+      col[i * 3] = b.r + t1[0] * k1 + t2[0] * k2; col[i * 3 + 1] = b.g + t1[1] * k1 + t2[1] * k2; col[i * 3 + 2] = b.b + t1[2] * k1 + t2[2] * k2;
     }
     this.geo.attributes.color.needsUpdate = true; this.dirty = true;
   };
@@ -119,10 +95,8 @@
     var rc = this.canvas.getBoundingClientRect(), ray = new T.Raycaster();
     ray.setFromCamera(new T.Vector2(((cx - rc.left) / rc.width) * 2 - 1, -((cy - rc.top) / rc.height) * 2 + 1), this.cam);
     var hit = ray.intersectObject(this.mesh)[0]; if (!hit) return;
-    var f = hit.face, W = this.W, best = 0, bm = 0, m;
-    var o = [f.a, f.b, f.c].reduce(function (acc, v) { return acc; }, 0);
-    var acc = new Float32Array(NM), vs = [f.a, f.b, f.c], bc = hit.barycoord || null, i;
-    for (i = 0; i < 3; i++) for (m = 1; m < NM; m++) acc[m] += W[vs[i] * NM + m];
+    var f = hit.face, best = 0, bm = 0, m, acc = new Float32Array(NM), vs = [f.a, f.b, f.c], i;
+    for (i = 0; i < 3; i++) { var w1 = this.wt[vs[i]] / 255; acc[this.lab[vs[i]]] += w1; acc[this.lab2[vs[i]]] += 1 - w1; }
     for (m = 1; m < NM; m++) if (acc[m] > best) { best = acc[m]; bm = m; }
     if (bm && this.onPick) this.onPick(NAMES[bm]);
   };
