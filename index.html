@@ -3315,7 +3315,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.50';
+var APP_VER = 'v0.51';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3577,7 +3577,7 @@ function viewSummary() {
     (s.prs.length ? '<div class="card"><div class="lab">Nouveaux records e1RM</div>' + s.prs.map(function (n) { return '<div class="ename" style="font-size:14.5px">' + esc(n) + '</div>'; }).join('') + '</div>' : '') +
     '<div class="msg' + (s.saved ? '' : ' err') + '">' + (s.saved ? 'Séance ajoutée à ton historique. Tes courbes et tes prochaines charges en tiennent compte.' : 'Séance prise en compte, mais ce navigateur n\'a pas pu la garder. Exporte le CSV maintenant.') + '</div>' +
     (s.saved ? '<div class="legend">Une copie de sécurité a été gardée automatiquement sur cet appareil.' + (s.auto ? '' : ' Pour aussi recevoir un fichier à chaque séance, active-le dans Données.') + '</div>' : '') +
-    '<div class="row"><button class="btn primary" data-act="bk">Sauvegarder mes données</button><button class="btn" data-act="tab" data-t="data">Exporter le CSV</button><button class="btn" data-act="sumclose">Fermer</button></div></section>' + adviceCard('Pour finir');
+    '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="bk">Sauvegarder mes données</button><button class="btn" data-act="tab" data-t="data">Exporter le CSV</button><button class="btn" data-act="sumclose">Fermer</button></div></section>' + adviceCard('Pour finir');
 }
 
 /* ---------- sauvegarde complète ---------- */
@@ -3593,18 +3593,41 @@ function backupNag() {
   var d = daysSinceBackup(); if (d !== null && d < 14) return '';
   return '<div class="msg tip">' + (d === null ? 'Tu n\'as pas encore sauvegardé tes données.' : 'Dernière sauvegarde il y a ' + d + ' jours.') + ' Elles ne sont que sur cet appareil : sauvegarde-les pour ne rien perdre. <button class="btn" data-act="bk">Sauvegarder</button></div>';
 }
+var toastT = 0;
+function toast(t, err) {
+  var el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.setAttribute('role', 'status'); el.className = 'msg'; el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.5);background:var(--surface)'; document.body.appendChild(el); }
+  el.className = 'msg' + (err ? ' err' : ''); el.textContent = t; el.style.display = 'block';
+  clearTimeout(toastT); toastT = setTimeout(function () { el.style.display = 'none'; }, 9000);
+}
 function backupFile() {
   var txt = JSON.stringify(backupObj()), fn = 'beyourcoach-sauvegarde-' + new Date().toISOString().slice(0, 10) + '.json';
-  var done = function () { lsSet('cds.lastbackup', String(Date.now())); S.msg = { t: 'Sauvegarde créée : ' + fn + '. Garde-la dans un endroit sûr (mail, cloud).' }; S.bkText = null; render(); };
+  var ok = function (how) { lsSet('cds.lastbackup', String(Date.now())); S.bkText = null; toast(how, false); render(); };
+  var text = function () { S.bkText = txt; S.tab = 'data'; S.home = false; toast('Le fichier ne peut pas être créé ici. Le texte est affiché dans Données : copie-le et garde-le dans une note.', true); render(); };
+  var download = function () {
+    try {
+      var u = URL.createObjectURL(new Blob([txt], { type: 'application/json' })), a = document.createElement('a');
+      a.href = u; a.download = fn; document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
+      ok('Sauvegarde téléchargée : ' + fn + '. Cherche-la dans tes téléchargements. Si rien n\'apparaît, utilise « Copier la sauvegarde » dans Données.');
+    } catch (e) { text(); }
+  };
   try {
     var f = new File([txt], fn, { type: 'application/json' });
-    if (navigator.canShare && navigator.canShare({ files: [f] })) { navigator.share({ files: [f], title: 'BeYourCoach' }).then(done, function () {}); return; }
+    if (navigator.canShare && navigator.canShare({ files: [f] })) {
+      navigator.share({ files: [f], title: 'BeYourCoach' }).then(function () { ok('Sauvegarde envoyée.'); }, function (e) {
+        if (e && e.name === 'AbortError') toast('Partage annulé : aucune sauvegarde n\'a été créée.', true);
+        else download();
+      });
+      return;
+    }
   } catch (e) {}
-  try {
-    var u = URL.createObjectURL(new Blob([txt], { type: 'application/json' })), a = document.createElement('a');
-    a.href = u; a.download = fn; document.body.appendChild(a); a.click(); a.remove();
-    setTimeout(function () { URL.revokeObjectURL(u); }, 3000); done();
-  } catch (e) { S.msg = { err: true, t: 'Ce navigateur bloque le téléchargement. Le texte de la sauvegarde est affiché ci-dessous : copie-le et garde-le dans un fichier.' }; S.bkText = txt; render(); }
+  download();
+}
+function copyBackup() {
+  var txt = JSON.stringify(backupObj());
+  var fail = function () { S.bkText = txt; S.tab = 'data'; S.home = false; toast('Copie bloquée : le texte est affiché dans Données, sélectionne-le et copie-le.', true); render(); };
+  try { navigator.clipboard.writeText(txt).then(function () { lsSet('cds.lastbackup', String(Date.now())); toast('Sauvegarde copiée. Colle-la dans une note ou un mail à toi-même.', false); render(); }, fail); } catch (e) { fail(); }
 }
 /* copies internes automatiques (IndexedDB, 5 dernières) */
 var SNAPS = [];
@@ -3667,7 +3690,7 @@ function snapList() {
 function backupCard() {
   var d = daysSinceBackup();
   return '<section class="sec"><div class="lab">Sauvegarde complète</div><div class="drop"><div class="ename">Garde tout en sécurité</div><div class="legend">Profil, séances, import CSV, poids, repas, mensurations et réglages, dans un seul fichier. ' + (d === null ? 'Aucune sauvegarde faite pour l\'instant.' : 'Dernière sauvegarde : ' + (d === 0 ? 'aujourd\'hui' : 'il y a ' + d + ' jour' + (d > 1 ? 's' : '')) + '.') + '</div>' +
-    '<div class="row"><button class="btn primary" data-act="bk">Créer une sauvegarde</button><label class="btn">Restaurer…<input id="bkfile" type="file" hidden accept=".json,application/json"></label></div>' +
+    '<div class="row"><button class="btn primary" data-act="bk">Créer une sauvegarde</button><button class="btn" data-act="bkcopy">Copier la sauvegarde</button><label class="btn">Restaurer…<input id="bkfile" type="file" hidden accept=".json,application/json"></label></div>' +
     '<div class="row"><button class="btn' + (lsGet('cds.autobk') === '1' ? ' primary' : '') + '" data-act="autobk">Fichier après chaque séance : ' + (lsGet('cds.autobk') === '1' ? 'activé' : 'désactivé') + '</button></div>' +
     '<div class="legend">Activé, la feuille de partage (ou un téléchargement) s\'ouvre quand tu termines une séance : tu choisis où ranger le fichier (Drive, mail, iCloud…).</div>' +
     snapList() +
@@ -3745,6 +3768,7 @@ document.addEventListener('click', function (e) {
   }
   else if (a === 'home') { S.onb = null; if (!S.active) S.home = true; else go('seance'); S.msg = null; }
   else if (a === 'bk') { backupFile(); return; }
+  else if (a === 'bkcopy') { copyBackup(); return; }
   else if (a === 'bkgo') { applyRestore(); }
   else if (a === 'autobk') { lsSet('cds.autobk', lsGet('cds.autobk') === '1' ? '0' : '1'); }
   else if (a === 'snaprest') { var sn = SNAPS[wi]; if (sn) { var n2 = sn.n; S.bk = sn.obj; S.bkInfo = { date: sn.obj.date, n: n2 }; S.msg = null; } }
