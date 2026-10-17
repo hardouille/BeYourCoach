@@ -2545,7 +2545,10 @@ function weekVol(t0, t1) {
 function weekCompare(ws) {
   var cur = ws[ws.length - 1], prv = ws[ws.length - 2]; if (!prv) return '';
   var vc = weekVol(cur.t, cur.t + 7 * 864e5), vp = weekVol(prv.t, prv.t + 7 * 864e5);
-  var row = function (lab, a, b, u) { var d = a - b; return '<div class="mrow"><span>' + lab + '</span><span class="mono">' + a.toLocaleString('fr-FR') + u + '</span><span class="mono">' + (b ? 'avant : ' + b.toLocaleString('fr-FR') + u : '') + (d ? ' (' + (d > 0 ? '+' : '') + d.toLocaleString('fr-FR') + ')' : '') + '</span></div>'; };
+  var row = function (lab, a, b, u) {
+    var d = a - b, f = function (n) { return n.toLocaleString('fr-FR'); };
+    return '<div style="display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 0;border-top:1px solid var(--line)"><div><div style="font-size:13px;color:var(--muted)">' + lab + '</div><div class="mono" style="font-size:12px;color:var(--muted)">avant : ' + f(b) + u + '</div></div><div style="text-align:right"><div style="font-size:22px;font-weight:700;font-variant-numeric:tabular-nums">' + f(a) + u + '</div>' + (d ? '<div class="mono" style="font-size:12.5px;color:var(' + (d > 0 ? '--good' : '--crit') + ')">' + (d > 0 ? '+' : '−') + f(Math.abs(d)) + u + '</div>' : '<div class="mono" style="font-size:12.5px;color:var(--muted)">=</div>') + '</div></div>';
+  };
   return '<section class="sec"><div><h2>Cette semaine, comparée à la précédente</h2><p class="sub">La semaine en cours n\'est pas finie : le total peut encore monter.</p></div><div class="card">' + row('Séances', cur.sessions, prv.sessions, '') + row('Séries', cur.sets, prv.sets, '') + row('Volume', vc, vp, ' kg') + '</div></section>';
 }
 function recordsSection() {
@@ -3315,7 +3318,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.52';
+var APP_VER = 'v0.53';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3566,14 +3569,23 @@ function finishWorkout() {
     var lastH = X.hist[X.hist.length - 1];
     if (before[e.name] > 0 && lastH.score > before[e.name] + 1e-9) prs.push(e.name);
   });
-  S.summary = { dur: Date.now() - a.t0, sets: sets, vol: Math.round(vol), prs: prs, saved: saved, title: a.title, auto: lsGet('cds.autobk') === '1' };
+  S.summary = { dur: Date.now() - a.t0, sets: sets, vol: Math.round(vol), prs: prs, saved: saved, title: a.title, auto: lsGet('cds.autobk') === '1', exos: exos };
   if (saved) snapSave('seance');
   S.active = null; S.wmsg = null; S.confirm = null; saveActive(); unwake();
+}
+function recapCard(s) {
+  if (!s.exos || !s.exos.length) return '';
+  var f = function (n) { return Math.round(n).toLocaleString('fr-FR'); };
+  return '<div class="card"><div class="lab">Récap de la séance</div>' + s.exos.map(function (e) {
+    var v = 0, rp = 0; e.sets.forEach(function (x) { v += x.w * x.r; rp += x.r; });
+    var pr = s.prs.indexOf(e.name) >= 0;
+    return '<div style="display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-top:1px solid var(--line)"><div style="min-width:0"><div class="ename" style="font-size:14.5px">' + esc(e.name) + (pr ? ' 🏆' : '') + '</div><div class="emu">' + esc(C.setLine(e.sets)) + '</div></div><div class="mono" style="text-align:right;white-space:nowrap;font-size:13px">' + (v > 0 ? f(v) + ' kg' : rp + ' reps') + '</div></div>';
+  }).join('') + '</div>';
 }
 function viewSummary() {
   var s = S.summary;
   return '<section class="sec"><div><h2>Entraînement terminé</h2><p class="sub">' + esc(s.title) + '</p></div>' +
-    '<div class="strip"><div class="stat"><b>' + clock(s.dur) + '</b><span>durée</span></div><div class="stat"><b>' + s.sets + '</b><span>séries validées</span></div><div class="stat"><b>' + s.vol.toLocaleString('fr-FR') + '</b><span>kg soulevés au total</span></div></div>' +
+    '<div class="strip"><div class="stat"><b>' + clock(s.dur) + '</b><span>durée</span></div><div class="stat"><b>' + s.sets + '</b><span>séries validées</span></div><div class="stat"><b>' + s.vol.toLocaleString('fr-FR') + ' kg</b><span>poids total soulevé</span></div></div>' + recapCard(s) +
     (s.prs.length ? '<div class="card"><div class="lab">Nouveaux records e1RM</div>' + s.prs.map(function (n) { return '<div class="ename" style="font-size:14.5px">' + esc(n) + '</div>'; }).join('') + '</div>' : '') +
     '<div class="msg' + (s.saved ? '' : ' err') + '">' + (s.saved ? 'Séance ajoutée à ton historique. Tes courbes et tes prochaines charges en tiennent compte.' : 'Séance prise en compte, mais ce navigateur n\'a pas pu la garder. Exporte le CSV maintenant.') + '</div>' +
     (s.saved ? '<div class="legend">Une copie de sécurité a été gardée automatiquement sur cet appareil.' + (s.auto ? '' : ' Pour aussi recevoir un fichier à chaque séance, active-le dans Données.') + '</div>' : '') +
@@ -3598,25 +3610,25 @@ function toast(t, err) {
   var el = document.getElementById('toast');
   if (!el) { el = document.createElement('div'); el.id = 'toast'; el.setAttribute('role', 'status'); el.className = 'msg'; el.style.cssText = 'position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:99;box-shadow:0 8px 30px rgba(0,0,0,.5);background:var(--surface)'; document.body.appendChild(el); }
   el.className = 'msg' + (err ? ' err' : ''); el.textContent = t; el.style.display = 'block';
-  clearTimeout(toastT); toastT = setTimeout(function () { el.style.display = 'none'; }, 9000);
+  clearTimeout(toastT); toastT = setTimeout(function () { el.style.display = 'none'; }, err ? 3000 : 2000);
 }
 function backupFile() {
   var txt = JSON.stringify(backupObj()), fn = 'beyourcoach-sauvegarde-' + new Date().toISOString().slice(0, 10) + '.json';
   var ok = function (how) { lsSet('cds.lastbackup', String(Date.now())); S.bkText = null; toast(how, false); render(); };
-  var text = function () { S.bkText = txt; S.tab = 'data'; S.home = false; toast('Le fichier ne peut pas être créé ici. Le texte est affiché dans Données : copie-le et garde-le dans une note.', true); render(); };
+  var text = function () { S.bkText = txt; S.tab = 'data'; S.home = false; toast('Fichier impossible : texte affiché dans Données.', true); render(); };
   var download = function () {
     try {
       var u = URL.createObjectURL(new Blob([txt], { type: 'application/json' })), a = document.createElement('a');
       a.href = u; a.download = fn; document.body.appendChild(a); a.click(); a.remove();
       setTimeout(function () { URL.revokeObjectURL(u); }, 4000);
-      ok('Sauvegarde téléchargée : ' + fn + '. Cherche-la dans tes téléchargements. Si rien n\'apparaît, utilise « Copier la sauvegarde » dans Données.');
+      ok('Sauvegarde téléchargée.');
     } catch (e) { text(); }
   };
   try {
     var f = new File([txt], fn, { type: 'application/json' });
     if (navigator.canShare && navigator.canShare({ files: [f] })) {
       navigator.share({ files: [f], title: 'BeYourCoach' }).then(function () { ok('Sauvegarde envoyée.'); }, function (e) {
-        if (e && e.name === 'AbortError') toast('Partage annulé : aucune sauvegarde n\'a été créée.', true);
+        if (e && e.name === 'AbortError') toast('Partage annulé.', true);
         else download();
       });
       return;
@@ -3626,8 +3638,8 @@ function backupFile() {
 }
 function copyBackup() {
   var txt = JSON.stringify(backupObj());
-  var fail = function () { S.bkText = txt; S.tab = 'data'; S.home = false; toast('Copie bloquée : le texte est affiché dans Données, sélectionne-le et copie-le.', true); render(); };
-  try { navigator.clipboard.writeText(txt).then(function () { lsSet('cds.lastbackup', String(Date.now())); toast('Sauvegarde copiée. Colle-la dans une note ou un mail à toi-même.', false); render(); }, fail); } catch (e) { fail(); }
+  var fail = function () { S.bkText = txt; S.tab = 'data'; S.home = false; toast('Copie bloquée : texte affiché dans Données.', true); render(); };
+  try { navigator.clipboard.writeText(txt).then(function () { lsSet('cds.lastbackup', String(Date.now())); toast('Sauvegarde copiée.', false); render(); }, fail); } catch (e) { fail(); }
 }
 /* copies internes automatiques (IndexedDB, 5 dernières) */
 var SNAPS = [];
