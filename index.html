@@ -195,6 +195,8 @@ select.search { appearance: auto; }
 .figbox svg.fig { width: 100%; max-width: 440px; height: auto; display: block; margin: 0 auto; }
 .vid { position: relative; width: 100%; max-width: 440px; margin: 0 auto 8px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
 .vid iframe, .vid .vth { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.vid.sk .skb { flex-direction: column; gap: 10px; background: linear-gradient(160deg, #0C2D2B, #05090B); }
+.vid.sk .skt { font-weight: 700; font-size: 14px; }
 .vid.v { aspect-ratio: 9 / 16; max-width: 260px; }
 .vid .vth { padding: 0; cursor: pointer; background: #000 center / cover no-repeat; color: #fff; display: flex; align-items: center; justify-content: center; font: inherit; }
 .vid .vth .vb { width: 58px; height: 58px; border-radius: 50%; background: rgba(0,0,0,.62); border: 2px solid #fff; display: flex; align-items: center; justify-content: center; }
@@ -3127,6 +3129,30 @@ var VIDEOS = {
   "TeamSuperPhysique"
  ]
 };
+/* Modèles 3D animés : visionneuse officielle Sketchfab (rien n'est copié). nom de l'exercice -> [identifiant du modèle, titre] ; auteur : Mike - 3D Muscle Model */
+var SKETCH = {
+  'Développé couché (barre)': ['4f340552dd9b4f428ef51a64888fd13e', 'The Barbell Bench Press'],
+  'Squat (barre)': ['11c53f93e3624519afb193ab34e35d01', 'The Barbell Squat Muscles & Anatomy'],
+  'Rowing haltère': ['90978df29f954acc81326a87d797b8a5', 'Dumbbell Rows'],
+  'Soulevé de terre sumo (barre)': ['d15b8bb471e346fa8c02b38011fa4944', 'The Sumo Deadlift'],
+  'Soulevé de terre (barre)': ['2aff1c3f0145403583a4e14655637d91', 'The Conventional Deadlift'],
+  'Développé militaire (barre)': ['a8f1b79b98304703bb9bf3d16d600b3e', 'The Barbell Overhead Press'],
+  'Tirage poitrine (poulie)': ['4c2023e34c9543f9896001ebc7088286', 'The Plate Loaded Lat Pulldown'],
+  'Presse à cuisses': ['bc1dd40071da4bbcb16947da6bc2b6c4', 'The Pivot Leg Press'],
+  'Crunch': ['b70eb4054ba946ad91eeec0a63145d02', 'Bodyweight Crunch'],
+  'Rowing T-bar': ['c6fccd943ec14d5db22e679beed7bef1', 'Chest Supported T-Bar Row'],
+  'Soulevé de terre roumain (barre)': ['7e7b621f4d4b44cfb0c638c259cc9682', 'The Barbell Romanian Deadlift'],
+  'Curl poulie': ['9c7504441618427089302eae2d040c94', 'Bicep Cable Curl Facing In'],
+  'Curl pupitre (barre)': ['de3e066ba68f4090a1439708076d26ad', 'The Preacher Curl With EZ Bar'],
+  'Écarté (haltères)': ['73e5248313a64bb0b924525c46e755e8', 'Dumbbell Flys']
+};
+function sketchHTML(name) {
+  var v = SKETCH[name]; if (!v) return '';
+  var id = v[0], on = S.sk === id;
+  return '<div class="vid sk">' + (on ? '<iframe src="https://sketchfab.com/models/' + id + '/embed?autostart=1&amp;dnt=1&amp;ui_theme=dark" title="Modèle 3D : ' + esc(name) + '" allow="autoplay; fullscreen; xr-spatial-tracking" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>' :
+    '<button class="vth skb" data-act="skplay" data-k="' + id + '" aria-label="Voir le mouvement en 3D"><span class="vb"></span><span class="skt">Voir le mouvement en 3D</span></button>') + '</div>' +
+    '<p class="legend">Modèle 3D : Mike - 3D Muscle Model sur Sketchfab (connexion requise). <a href="https://sketchfab.com/3d-models/' + id + '" target="_blank" rel="noopener">Ouvrir sur Sketchfab</a></p>';
+}
 function videoHTML(name) {
   var v = VIDEOS[name]; if (!v) return '';
   var id = v[0], on = S.vp === id;
@@ -3139,7 +3165,7 @@ function ficheHTML(name) {
   var front = (Anim.patterns[e.p] || {}).v === 'front';
   var ph = window.PHOTOS && PHOTOS[name];
   var phHTML = ph ? '<div class="ph"><img src="img/' + ph + '-0.jpg" alt="" class="phi a" loading="lazy"><img src="img/' + ph + '-1.jpg" alt="Position de fin de mouvement" class="phi b" loading="lazy"></div>' : '';
-  return '<div class="fiche">' + videoHTML(name) + '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
+  return '<div class="fiche">' + sketchHTML(name) + videoHTML(name) + '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
     '<p class="legend">' + (ph ? 'Photos : début puis fin du mouvement (free-exercise-db, domaine public). Le geste exact peut varier selon la machine.' : (front ? 'Vue de face.' : 'Vue de profil.') + ' La couleur montre ce qui travaille. Dessin schématique.') + '</p>' +
     '<div class="lab">Muscles</div><p class="why"><b>' + e.m + '</b>' + (e.sec ? ' · secondaires : ' + esc(e.sec) : '') + '</p>' +
     '<div class="lab">Matériel</div><p class="why">' + esc(e.eq) + '</p>' +
@@ -3219,7 +3245,7 @@ function legalCard() {
   return '<section class="sec"><div class="lab">Informations importantes</div>' +
     '<details class="lg"><summary>Avertissement santé</summary><p class="why">BeYourCoach donne des informations générales sur l\'entraînement et l\'alimentation. Ce n\'est pas un avis médical et cela ne remplace ni un médecin ni un coach diplômé. Demande l\'avis d\'un médecin avant de commencer ou de reprendre le sport, surtout en cas de problème de santé, de blessure, de grossesse ou de traitement. Arrête l\'exercice en cas de douleur, de vertige ou de gêne respiratoire. Les charges proposées sont des points de départ à adapter. Les conseils alimentaires sont indicatifs. Les moins de 18 ans doivent s\'entraîner avec l\'accord et l\'aide d\'un adulte.</p></details>' +
     '<details class="lg"><summary>Confidentialité</summary><p class="why">Il n\'y a ni compte, ni publicité, ni suivi. Ton profil, tes séances, ton poids et tes réglages restent uniquement dans ce navigateur, sur cet appareil. Ils ne sont envoyés nulle part. Tu peux tout effacer avec « Effacer mes données » ou en vidant les données du site dans ton navigateur.</p><p class="why">Deux éléments contactent des services extérieurs : l\'hébergeur de l\'application (GitHub), qui voit ton adresse IP quand tu ouvres l\'app, et YouTube (Google). Les miniatures des vidéos se chargent depuis YouTube quand tu ouvres une fiche, et le lecteur YouTube se charge quand tu touches une vidéo. Google peut alors recevoir des informations techniques comme ton adresse IP. Sans connexion, les vidéos ne s\'affichent pas.</p></details>' +
-    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
+    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
     '</section>';
 }
 function viewData() {
@@ -3481,6 +3507,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'sfiche') S.sf = S.sf === k ? null : k;
   else if (a === 'wfiche') S.wf = S.wf === k ? null : k;
   else if (a === 'vplay') S.vp = k;
+  else if (a === 'skplay') S.sk = k;
   else if (a === 'anim') { Anim.setPlaying(!Anim.isPlaying()); document.querySelectorAll('.figbox').forEach(function (f) { f.classList.toggle('paused', !Anim.isPlaying()); }); }
   else if (a === 'addx') { var xi = S.xtra.indexOf(k); if (xi >= 0) S.xtra.splice(xi, 1); else S.xtra.push(k); }
   else if (a === 'start') { startWorkout(); window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); }
