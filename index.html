@@ -195,6 +195,8 @@ select.search { appearance: auto; }
 .figbox svg.fig { width: 100%; max-width: 440px; height: auto; display: block; margin: 0 auto; }
 .vid { position: relative; width: 100%; max-width: 440px; margin: 0 auto 8px; aspect-ratio: 16 / 9; border-radius: 10px; overflow: hidden; background: #000; }
 .vid iframe, .vid .vth { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+.vid.vt { aspect-ratio: 1 / 1; max-width: 360px; background: #fff; cursor: pointer; }
+.vid.vt video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; display: block; }
 .vid.sk .skb { flex-direction: column; gap: 10px; background: linear-gradient(160deg, #0C2D2B, #05090B); }
 .vid.sk .skt { font-weight: 700; font-size: 14px; }
 .vid.v { aspect-ratio: 9 / 16; max-width: 260px; }
@@ -3129,6 +3131,42 @@ var VIDEOS = {
   "TeamSuperPhysique"
  ]
 };
+/* Animations 3D (Vital Animations, licence commerciale) : nom de l'exercice -> numéro de l'animation, fichier anim/NUMERO.mp4 */
+var VITAL = {
+  "Écarté (machine)": '0051',
+  "Squat (barre)": '0054',
+  "Squat avant (barre)": '0056',
+  "Hip thrust (barre)": '0057',
+  "Soulevé de terre roumain (barre)": '0060',
+  "Kickback fessier (poulie)": '0061',
+  "Squat goblet": '0064',
+  "Hack squat (machine)": '0068',
+  "Abduction hanche (machine)": '0069',
+  "Leg extension": '0073',
+  "Presse à cuisses": '0074',
+  "Leg curl allongé (machine)": '0075',
+  "Leg curl assis (machine)": '0079',
+  "Step-up haut (haltères)": '0081',
+  "Extension triceps corde": '0085',
+  "Développé Arnold": '0087',
+  "Développé militaire (barre)": '0088',
+  "Rowing debout (barre)": '0089',
+  "Développé militaire (haltères)": '0090',
+  "Tirage menton (haltères)": '0091',
+  "Élévation frontale (haltères)": '0092',
+  "Élévation latérale (poulie)": '0095',
+  "Élévation latérale (haltères)": '0096',
+  "Oiseau (machine)": '0099',
+  "Oiseau poulie croisé": '0100',
+  "Développé épaules (machine)": '0080',
+  "Split squat bulgare": '0063',
+  "Step-up": '0081'
+};
+function vitalHTML(name) {
+  var id = VITAL[name]; if (!id) return '';
+  return '<div class="vid vt"><video src="anim/' + id + '.mp4" poster="anim/' + id + '.jpg" muted loop playsinline autoplay preload="metadata" aria-label="Animation 3D : ' + esc(name) + '"></video></div>' +
+    '<p class="legend">Animation 3D en boucle : Vital Animations. Touche l\'image pour mettre en pause ou relancer.</p>';
+}
 /* Modèles 3D animés : visionneuse officielle Sketchfab (rien n'est copié). nom de l'exercice -> [identifiant du modèle, titre] ; auteur : Mike - 3D Muscle Model */
 var SKETCH = {
   'Développé couché (barre)': ['4f340552dd9b4f428ef51a64888fd13e', 'The Barbell Bench Press'],
@@ -3165,7 +3203,7 @@ function ficheHTML(name) {
   var front = (Anim.patterns[e.p] || {}).v === 'front';
   var ph = window.PHOTOS && PHOTOS[name];
   var phHTML = ph ? '<div class="ph"><img src="img/' + ph + '-0.jpg" alt="" class="phi a" loading="lazy"><img src="img/' + ph + '-1.jpg" alt="Position de fin de mouvement" class="phi b" loading="lazy"></div>' : '';
-  return '<div class="fiche">' + sketchHTML(name) + videoHTML(name) + '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
+  return '<div class="fiche">' + vitalHTML(name) + sketchHTML(name) + videoHTML(name) + '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
     '<p class="legend">' + (ph ? 'Photos : début puis fin du mouvement (free-exercise-db, domaine public). Le geste exact peut varier selon la machine.' : (front ? 'Vue de face.' : 'Vue de profil.') + ' La couleur montre ce qui travaille. Dessin schématique.') + '</p>' +
     '<div class="lab">Muscles</div><p class="why"><b>' + e.m + '</b>' + (e.sec ? ' · secondaires : ' + esc(e.sec) : '') + '</p>' +
     '<div class="lab">Matériel</div><p class="why">' + esc(e.eq) + '</p>' +
@@ -3245,7 +3283,7 @@ function legalCard() {
   return '<section class="sec"><div class="lab">Informations importantes</div>' +
     '<details class="lg"><summary>Avertissement santé</summary><p class="why">BeYourCoach donne des informations générales sur l\'entraînement et l\'alimentation. Ce n\'est pas un avis médical et cela ne remplace ni un médecin ni un coach diplômé. Demande l\'avis d\'un médecin avant de commencer ou de reprendre le sport, surtout en cas de problème de santé, de blessure, de grossesse ou de traitement. Arrête l\'exercice en cas de douleur, de vertige ou de gêne respiratoire. Les charges proposées sont des points de départ à adapter. Les conseils alimentaires sont indicatifs. Les moins de 18 ans doivent s\'entraîner avec l\'accord et l\'aide d\'un adulte.</p></details>' +
     '<details class="lg"><summary>Confidentialité</summary><p class="why">Il n\'y a ni compte, ni publicité, ni suivi. Ton profil, tes séances, ton poids et tes réglages restent uniquement dans ce navigateur, sur cet appareil. Ils ne sont envoyés nulle part. Tu peux tout effacer avec « Effacer mes données » ou en vidant les données du site dans ton navigateur.</p><p class="why">Deux éléments contactent des services extérieurs : l\'hébergeur de l\'application (GitHub), qui voit ton adresse IP quand tu ouvres l\'app, et YouTube (Google). Les miniatures des vidéos se chargent depuis YouTube quand tu ouvres une fiche, et le lecteur YouTube se charge quand tu touches une vidéo. Google peut alors recevoir des informations techniques comme ton adresse IP. Sans connexion, les vidéos ne s\'affichent pas.</p></details>' +
-    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
+    '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les animations 3D en boucle viennent de Vital Animations (licence commerciale). Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
     '</section>';
 }
 function viewData() {
@@ -3553,6 +3591,11 @@ document.addEventListener('input', function (e) {
     var s = S.active.exos[+e.target.getAttribute('data-i')].sets[+e.target.getAttribute('data-j')], v = parseFloat(String(e.target.value).replace(',', '.'));
     s[f] = isFinite(v) && v > 0 ? v : 0; saveActive();
   }
+});
+document.addEventListener('click', function (e) {
+  var vt = e.target.closest && e.target.closest('.vid.vt'); if (!vt) return;
+  var vd = vt.querySelector('video'); if (!vd) return;
+  if (vd.paused) { var pr = vd.play(); if (pr && pr.catch) pr.catch(function () {}); } else vd.pause();
 });
 document.addEventListener('change', function (e) {
   if (e.target.classList && e.target.classList.contains('repsel')) { var rv = e.target.value, ri = +e.target.getAttribute('data-i'); if (rv && S.active && S.active.exos[ri] && !S.active.exos.some(function (x) { return x.name === rv; })) { replaceExo(ri, rv); render(); } return; }
