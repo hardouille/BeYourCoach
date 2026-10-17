@@ -3333,7 +3333,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.57';
+var APP_VER = 'v0.58';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3559,7 +3559,7 @@ function rbText(el, t) { return el >= t ? 'Repos terminé' : 'Repos · ' + clock
 function restBarHTML() {
   var a = S.active; if (!a || !a.lastOk) return '';
   var el = Date.now() - a.lastOk, t = (a.restS || 90) * 1000, done = el >= t;
-  return '<div style="height:84px"></div><div id="restbar" role="status" style="position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:6;border-radius:14px;padding:10px 12px;background:var(--surface);border:1.5px solid ' + (done ? 'var(--good)' : 'var(--line)') + ';box-shadow:0 8px 28px rgba(0,0,0,.6);display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><div id="rb-t" class="mono" style="font-size:16px;font-weight:700;color:' + (done ? 'var(--good)' : 'var(--ink)') + '">' + rbText(el, t) + '</div><div style="height:5px;border-radius:3px;background:var(--line);margin-top:6px;overflow:hidden"><div id="rb-f" style="height:100%;width:' + Math.min(100, el / t * 100) + '%;background:var(--grad)"></div></div></div><button class="chip" data-act="rb15">+15 s</button><button class="chip" data-act="rbskip">' + (done ? 'OK' : 'Passer') + '</button></div>';
+  return '<div id="restbar" role="status" style="position:fixed;left:12px;right:12px;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:6;border-radius:14px;padding:10px 12px;background:var(--surface);border:1.5px solid ' + (done ? 'var(--good)' : 'var(--line)') + ';box-shadow:0 8px 28px rgba(0,0,0,.6);display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><div id="rb-t" class="mono" style="font-size:16px;font-weight:700;color:' + (done ? 'var(--good)' : 'var(--ink)') + '">' + rbText(el, t) + '</div><div style="height:5px;border-radius:3px;background:var(--line);margin-top:6px;overflow:hidden"><div id="rb-f" style="height:100%;width:' + Math.min(100, el / t * 100) + '%;background:var(--grad)"></div></div></div><button class="chip" data-act="rb15">+15 s</button><button class="chip" data-act="rbskip">' + (done ? 'OK' : 'Passer') + '</button></div>';
 }
 function viewWorkout() {
   var a = S.active, total = 0, okn = 0;
@@ -3596,7 +3596,7 @@ function viewWorkout() {
   var opts = C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (e) { return e.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (e) { return '<option value="' + esc(e.n) + '">' + esc(e.n) + (model.ex[e.n] ? '' : ' (nouveau)') + '</option>'; }).join('') + '</optgroup>'; }).join('');
   return h + '<select id="addex" class="search" aria-label="Ajouter un exercice"><option value="">+ Ajouter un exercice</option>' + opts + '</select>' +
     (S.fmsg ? '<div class="msg err">' + esc(S.fmsg) + '</div>' : '') +
-    '<button class="btn primary big" data-act="wfin">Terminer l\'entraînement</button><div><button class="btn" data-act="wabort">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button></div>' + restBarHTML();
+    '<div style="height:' + (S.active.lastOk ? 150 : 84) + 'px"></div><div id="endbar" style="position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:6;display:flex;gap:8px;padding:8px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line);box-shadow:0 8px 28px rgba(0,0,0,.35)"><button class="btn' + (S.confirm === 'abort' ? ' primary' : '') + '" data-act="wabort" style="flex:0 0 auto">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button><button class="btn primary" data-act="wfin" style="flex:1;min-width:0">Terminer l\'entraînement</button></div>' + restBarHTML();
 }
 function finishWorkout() {
   var a = S.active, exos = [];
