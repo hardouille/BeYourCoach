@@ -2771,6 +2771,19 @@ function viewHisto() {
   var top = '<section class="sec"><div><h2>Mes séances</h2></div><div class="strip"><div class="stat"><b>' + all.length + '</b><span>séances au total</span></div><div class="stat"><b>' + (ws ? ws.sessions : 0) + '</b><span>cette semaine</span></div><div class="stat"><b>' + mo + '</b><span>sur 30 jours</span></div></div></section>';
   return top + historySection();
 }
+function logIdx(se) { for (var i = 0; i < log.length; i++) if (log[i].title + '|' + C.fmtFR(log[i].start) === se.id) return i; return -1; }
+function syncHe() {
+  if (!S.he) return;
+  S.he.exos.forEach(function (e, i) { e.sets.forEach(function (x, j) { var w = $('he-' + i + '-' + j + '-w'), r = $('he-' + i + '-' + j + '-r'); if (w) x.w = w.value; if (r) x.r = r.value; }); });
+}
+function heditHTML(se) {
+  var he = S.he;
+  return '<div class="detail">' + he.exos.map(function (e, i) {
+    return '<div class="hrow"><div class="ename" style="font-size:14px">' + esc(e.name) + '</div><div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' + e.sets.map(function (x, j) {
+      return '<div class="sg"><span class="mono">' + (j + 1) + '</span><input class="in" id="he-' + i + '-' + j + '-w" inputmode="decimal" value="' + esc(String(x.w)) + '" aria-label="Charge en kg, série ' + (j + 1) + '"><input class="in" id="he-' + i + '-' + j + '-r" inputmode="numeric" value="' + esc(String(x.r)) + '" aria-label="Répétitions, série ' + (j + 1) + '"><span></span><button class="btn x" data-act="hesd" data-i="' + i + '" data-j="' + j + '" aria-label="Supprimer la série ' + (j + 1) + '">×</button></div>';
+    }).join('') + '</div>';
+  }).join('') + (he.err ? '<div class="msg err">' + esc(he.err) + '</div>' : '') + '<div class="row"><button class="btn" data-act="hecancel">Annuler</button><button class="btn primary" data-act="hesave" style="flex:1">Enregistrer les changements</button></div></div>';
+}
 function historySection() {
   var all = model.sessions.slice().reverse(), shown = all.slice(0, S.hn);
   if (!all.length) return '';
@@ -2787,7 +2800,9 @@ function historySection() {
       if (hh) { var prev = X.hist.filter(function (x) { return x.t < se.t; }); rec = prev.length > 0 && hh.score > Math.max.apply(null, prev.map(function (x) { return x.score; })); if (rec) prs++; }
       return '<div class="hrow"><div class="ename" style="font-size:14px">' + esc(nm) + (rec ? ' <span class="pill up">Record</span>' : '') + '</div><div class="hist">' + esc(hh ? C.setLine(hh.sets) : '') + '</div></div>';
     }).join('');
-    return row + '<div class="detail">' + det + '</div>';
+    if (S.he && S.he.id === se.id) return row + heditHTML(se);
+    var own = logIdx(se) >= 0, acts = own ? '<div class="row"><button class="btn" data-act="hedit" data-k="' + esc(se.id) + '">Modifier</button><button class="btn' + (S.confirm === 'hdel' ? ' primary' : '') + '" data-act="hdel" data-k="' + esc(se.id) + '">' + (S.confirm === 'hdel' ? 'Confirmer la suppression' : 'Supprimer') + '</button></div>' : '';
+    return row + '<div class="detail">' + det + acts + '</div>';
   }).join('') + '</div>';
   if (all.length > S.hn) h += '<button class="btn" data-act="hmore">Voir plus (' + (all.length - S.hn) + ' restantes)</button>';
   return h + '</section>';
@@ -3507,7 +3522,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.64';
+var APP_VER = 'v0.65';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3961,7 +3976,7 @@ function copyCSV() {
 document.addEventListener('click', function (e) {
   var b = e.target.closest('[data-act]'); if (!b) return;
   var a = b.getAttribute('data-act'), m = b.getAttribute('data-m'), k = b.getAttribute('data-k'), wi = +b.getAttribute('data-i'), wj = +b.getAttribute('data-j');
-  if (a !== 'reset' && a !== 'wabort' && a !== 'wrm' && a !== 'rbdelete') S.confirm = null;
+  if (a !== 'reset' && a !== 'wabort' && a !== 'wrm' && a !== 'rbdelete' && a !== 'hdel') S.confirm = null;
   if (a === 'tab') return go(b.getAttribute('data-t'));
   if (['pick', 'swap', 'preset', 'plansel', 'addm', 'aiplan'].indexOf(a) >= 0) S.solo = false;
   if (a === 'pick' && m === injured() && S.sel.indexOf(m) < 0) { S.evwarn = 'Tu as signalé une douleur sur ' + m + ' : on le ménage. Choisis un autre muscle, ou touche « Revenir au programme normal » si c\'est réglé.'; }
@@ -4079,7 +4094,21 @@ document.addEventListener('click', function (e) {
     else { applyProfile(np); return; }
   }
   else if (a === 'fiche') S.fiche = S.fiche === k ? null : k;
-  else if (a === 'hist') S.hs = S.hs === k ? null : k;
+  else if (a === 'hist') { S.hs = S.hs === k ? null : k; S.he = null; S.confirm = null; }
+  else if (a === 'hedit') { var hi = model.sessions.filter(function (z) { return z.id === k; })[0], li0 = hi ? logIdx(hi) : -1; if (li0 >= 0) { S.he = { id: k, idx: li0, exos: log[li0].exos.map(function (e) { return { name: e.name, sets: e.sets.map(function (x) { return { w: x.w > 0 ? x.w : 0, r: x.r }; }) }; }) }; S.confirm = null; } }
+  else if (a === 'hecancel') S.he = null;
+  else if (a === 'hesd') { syncHe(); if (S.he) { S.he.exos[wi].sets.splice(wj, 1); if (!S.he.exos[wi].sets.length) S.he.exos.splice(wi, 1); S.he.err = null; } }
+  else if (a === 'hesave') {
+    syncHe(); var bad = false, nx = [];
+    S.he.exos.forEach(function (e) { var ss = []; e.sets.forEach(function (x) { var w = parseFloat(String(x.w).replace(',', '.')), r = Math.round(parseFloat(String(x.r).replace(',', '.'))); if (!(w >= 0 && w <= 1000) || !(r >= 1 && r <= 999)) bad = true; else ss.push({ w: w, r: r }); }); if (ss.length) nx.push({ name: e.name, sets: ss }); });
+    if (bad) S.he.err = 'Vérifie les nombres : charge entre 0 et 1000 kg, répétitions entre 1 et 999.';
+    else if (!nx.length) S.he.err = 'Garde au moins une série, ou supprime la séance.';
+    else { var ent = log[S.he.idx]; if (ent) { ent.exos = nx; lsSet('cds.log', JSON.stringify(log)); rebuild(); S.msg = null; } S.he = null; }
+  }
+  else if (a === 'hdel') {
+    if (S.confirm === 'hdel') { var hs0 = model.sessions.filter(function (z) { return z.id === k; })[0], li1 = hs0 ? logIdx(hs0) : -1; if (li1 >= 0) { log.splice(li1, 1); lsSet('cds.log', JSON.stringify(log)); rebuild(); } S.hs = null; S.confirm = null; }
+    else S.confirm = 'hdel';
+  }
   else if (a === 'hmore') S.hn += 20;
   else if (a === 'sfiche') S.sf = S.sf === k ? null : k;
   else if (a === 'wfiche') S.wf = S.wf === k ? null : k;
