@@ -91,9 +91,33 @@ nav.tabs {
 }
 nav.tabs:empty { display: none; }
 .tabs button { border: 0; background: none; padding: 6px 2px; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--muted); font-size: 11px; font-weight: 500; border-radius: 8px; min-width: 0; }
-.tabs svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.tabs svg { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .tabs button[aria-current="page"] { color: var(--accent); font-weight: 600; }
 
+
+:root[data-theme="light"] { --bg: #F3F6F6; --surface: #FFFFFF; --ink: #0B1A1D; --muted: #53686D; --line: #D3DFE0; --accent: #0A9150; --accent2: #0891A3; --accent-ink: #FFFFFF; --accent-soft: #DDF4E7; --good: #15803D; --warn: #B45309; --crit: #C2410C; --good-soft: #DCF4E3; --warn-soft: #FFF0D2; --crit-soft: #FDE4DD; --grad: linear-gradient(90deg, #0A9150, #0891A3); color-scheme: light; }
+:root[data-theme="light"] .sg.ok .btn.ck { color: #fff; }
+:root[data-theme="light"] .hlogo { box-shadow: 0 0 0 1px var(--line); }
+.today { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; text-align: left; border: 0; border-radius: 16px; padding: 16px 18px; background: var(--grad); color: var(--accent-ink); }
+.today b { font: 800 20px/1.15 var(--f-display); letter-spacing: .02em; text-transform: uppercase; }
+.today span { font-size: 13.5px; opacity: .9; }
+.today:active { transform: scale(.985); }
+.silo { display: flex; flex-direction: column; gap: 6px; align-items: center; }
+.silo svg { width: 100%; max-width: 400px; height: auto; display: block; }
+.silo .base { fill: var(--line); opacity: .55; }
+.silo .m { cursor: pointer; }
+.silo .m * { stroke: var(--bg); stroke-width: .8; transition: fill .15s; }
+.silo .m.ready * { fill: var(--good); } .silo .m.recup * { fill: var(--warn); } .silo .m.fatigue * { fill: var(--crit); } .silo .m.none * { fill: var(--muted); fill-opacity: .55; }
+.silo .m.sel * { stroke: var(--ink); stroke-width: 2.2; }
+.silo .m.inj * { stroke-dasharray: 2 2; }
+.silo .cap { font: 600 9px var(--f-body); letter-spacing: .08em; text-transform: uppercase; fill: var(--muted); }
+.silo .lg { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: center; font-size: 12px; color: var(--muted); }
+.silo .lg i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; }
+@keyframes okpop { 0% { transform: scale(.95); box-shadow: 0 0 0 0 var(--good); } 55% { transform: scale(1.025); } 100% { transform: scale(1); box-shadow: 0 0 0 4px var(--good-soft); } }
+.sg.pop { animation: okpop .4s ease-out; }
+.tabs button { padding: 7px 2px 5px; gap: 3px; }
+.tabs button[aria-current="page"] { background: var(--accent-soft); }
+@media (max-width: 400px) { .top { gap: 8px; } .brand { font-size: 19px; gap: 7px; } .brand img { width: 26px; height: 26px; } .meta { font-size: 10.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; } }
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .tile { text-align: left; background: var(--surface); border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 8px 9px 10px; overflow: hidden; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .tile[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-soft); }
@@ -104,7 +128,7 @@ nav.tabs:empty { display: none; }
 .pday.next { border-color: var(--accent); background: var(--accent-soft); }
 .pn { font: 800 16px var(--f-display); color: var(--accent); min-width: 20px; }
 .pm { flex: 1; min-width: 0; font-size: 14px; }
-.tabs button { font-size: 10px; padding-left: 0; padding-right: 0; }
+.tabs button { font-size: 11px; padding-left: 0; padding-right: 0; }
 .chat { display: flex; flex-direction: column; gap: 8px; }
 .bub { max-width: 88%; padding: 9px 12px; border-radius: 14px; font-size: 14.5px; line-height: 1.45; min-width: 0; overflow-wrap: anywhere; }
 .bub p { margin: 0 0 6px; } .bub p:last-child { margin: 0; } .bub ul { margin: 4px 0; padding-left: 18px; }
@@ -1954,6 +1978,17 @@ TABS = TABS.filter(function (t) { return t[0] !== 'coach' || AI_ON; });
 var seedCSV = $('seed').textContent, model, S = { fresh: false, onb: null, pf: {}, pfErr: null, home: true, tab: 'seance', sel: null, done: {}, open: null, range: 180, q: '', mf: 'Tous', msg: null, fiche: null, sf: null, xk: null, hs: null, hn: 10, wf: null, xtra: [] };
 
 function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function applyTheme() {
+  var t = lsGet('cds.theme') || 'dark';
+  if (t === 'auto') { try { t = window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark'; } catch (e) { t = 'dark'; } }
+  document.documentElement.setAttribute('data-theme', t);
+}
+applyTheme();
+function themeRow() {
+  var t = lsGet('cds.theme') || 'dark';
+  return '<div class="lab">Apparence</div><div class="chips">' + [['dark', 'Sombre'], ['light', 'Clair'], ['auto', 'Auto']].map(function (o) { return '<button class="chip" data-act="theme" data-v="' + o[0] + '" aria-pressed="' + (t === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div>';
+}
+
 function lsSet(k, v) { try { localStorage.setItem(k, v); return true; } catch (e) { return false; } }
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function norm(s) { return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''); }
@@ -2483,6 +2518,57 @@ function fold(key, label, body) {
   var o = S.open && S.open[key];
   return '<div style="display:flex;flex-direction:column;gap:10px;min-width:0"><button class="chip" data-act="fold" data-k="' + key + '" aria-expanded="' + !!o + '" style="align-self:flex-start">' + label + (o ? ' ▴' : ' ▾') + '</button>' + (o ? body : '') + '</div>';
 }
+
+function todayPick(byM) {
+  var best = null, inj = injured();
+  C.PRESETS.forEach(function (p) {
+    if (inj && p[1].indexOf(inj) >= 0) return;
+    var sc = 0, minH = 1e9;
+    p[1].forEach(function (m) { var h = byM[m].hours == null ? 240 : Math.min(byM[m].hours, 240); sc += h; if (h < minH) minH = h; });
+    sc = sc / p[1].length + (recPreset(p[0]) ? 30 : 0) - (minH < 24 ? 120 : 0);
+    if (!best || sc > best.sc) best = { sc: sc, p: p, minH: minH };
+  });
+  return best;
+}
+var SIL = {
+  front: [
+    ['Épaules', '<ellipse cx="22" cy="41" rx="8" ry="8.5"/>', 1],
+    ['Pectoraux', '<path d="M49 39 Q40 34 30 40 Q28 52 36 58 Q44 60 49 56 Z"/>', 1],
+    ['Abdos', '<rect x="41" y="60" width="18" height="34" rx="6"/>', 0],
+    ['Biceps', '<ellipse cx="15" cy="58" rx="5.5" ry="12" transform="rotate(6 15 58)"/>', 1],
+    ['Avant-bras', '<ellipse cx="11" cy="88" rx="4.8" ry="13" transform="rotate(4 11 88)"/>', 1],
+    ['Abducteurs', '<ellipse cx="27" cy="104" rx="4.5" ry="9"/>', 1],
+    ['Adducteurs', '<ellipse cx="45" cy="126" rx="4" ry="14"/>', 1],
+    ['Quadriceps', '<ellipse cx="35" cy="130" rx="9.5" ry="22"/>', 1]
+  ],
+  back: [
+    ['Trapèzes', '<path d="M50 28 L37 37 L41 52 L50 60 L59 52 L63 37 Z"/>', 0],
+    ['Épaules arrière', '<ellipse cx="22" cy="41" rx="8" ry="8.5"/>', 1],
+    ['Dos', '<path d="M30 48 L41 54 L48 64 L47 90 L38 86 Q31 70 30 48 Z"/>', 1],
+    ['Triceps', '<ellipse cx="15" cy="58" rx="5.5" ry="12" transform="rotate(6 15 58)"/>', 1],
+    ['Avant-bras', '<ellipse cx="11" cy="88" rx="4.8" ry="13" transform="rotate(4 11 88)"/>', 1],
+    ['Lombaires', '<rect x="42" y="80" width="16" height="14" rx="4"/>', 0],
+    ['Fessiers', '<ellipse cx="41" cy="106" rx="10" ry="9"/>', 1],
+    ['Ischios', '<ellipse cx="36" cy="136" rx="9" ry="19"/>', 1],
+    ['Mollets', '<ellipse cx="36" cy="178" rx="6.5" ry="16"/>', 1]
+  ]
+};
+function silhouetteHTML(byM) {
+  var mir = function (x) { return '<g transform="translate(100 0) scale(-1 1)">' + x + '</g>'; };
+  var base = '<g class="base"><circle cx="50" cy="14" r="10"/><rect x="45" y="22" width="10" height="9" rx="3"/><path d="M22 33 Q50 27 78 33 L79 62 L67 98 L69 112 L31 112 L33 98 L21 62 Z"/>' +
+    '<ellipse cx="15" cy="58" rx="6.5" ry="14"/><ellipse cx="11" cy="88" rx="5.5" ry="15"/><ellipse cx="10" cy="106" rx="4.5" ry="6"/><ellipse cx="35" cy="130" rx="11.5" ry="26"/><ellipse cx="36" cy="180" rx="7.5" ry="22"/><ellipse cx="37" cy="207" rx="6" ry="4"/></g>';
+  var fig = function (arr, dx, cap) {
+    var out = '<g transform="translate(' + dx + ' 6)">' + base + mir(base);
+    arr.forEach(function (r) {
+      var m = r[0], s = byM[m], on = S.sel.indexOf(m) >= 0;
+      out += '<g class="m ' + s.state + (on ? ' sel' : '') + (m === injured() ? ' inj' : '') + '" data-act="pick" data-m="' + m + '" role="button" aria-label="' + m + ' : ' + esc(s.label) + '">' + r[1] + (r[2] ? mir(r[1]) : '') + '</g>';
+    });
+    return out + '<text class="cap" x="50" y="222" text-anchor="middle">' + cap + '</text></g>';
+  };
+  return '<div class="silo"><svg viewBox="0 0 230 236" role="group" aria-label="Silhouette : touche un muscle">' + fig(SIL.front, 5, 'Face') + fig(SIL.back, 125, 'Dos') + '</svg>' +
+    '<div class="lg"><span><i style="background:var(--good)"></i>Reposé</span><span><i style="background:var(--warn)"></i>Récupère</span><span><i style="background:var(--crit)"></i>Fatigué</span><span><i style="background:var(--muted);opacity:.6"></i>Jamais fait</span></div>' +
+    '<p class="sub" style="margin:0;text-align:center">' + (S.sel.length ? 'Sélection : <b>' + S.sel.join(', ') + '</b>' : 'Touche un muscle (jusqu\'à 3).') + '</p></div>';
+}
 function viewSeance() {
   if (S.active) return viewWorkout();
   if (S.summary) return viewSummary();
@@ -2496,8 +2582,9 @@ function viewSeance() {
       return '<button class="tile" data-act="pick" data-m="' + m + '" aria-pressed="' + on + '"><span class="n">' + m + '</span><span class="s"><i class="dot ' + s.state + '"></i>' + esc(s.label) + '</span>' + (m === injured() ? '<span class="k">à ménager</span>' : '') + '</button>';
     }).join('') + '</div>';
   }).join('');
-  var h = '<section class="sec"><div><h2>Quel muscle aujourd\'hui ?</h2><p class="sub">Touche un muscle (jusqu\'à 3). Point vert : bien récupéré.</p></div>' +
-    '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + tiles + '</section>';
+  var tpk = S.sel.length ? null : todayPick(byM);
+  var h = '<section class="sec">' + (tpk ? '<button class="today" data-act="today"><span>Séance du jour</span><b>' + tpk.p[0] + '</b><span>' + tpk.p[1].join(' · ') + (tpk.minH >= 48 ? ' · bien reposés' : '') + '</span></button>' : '') + '<div><h2>' + (tpk ? 'Ou choisis ton muscle' : 'Quel muscle aujourd\'hui ?') + '</h2></div>' + silhouetteHTML(byM) +
+    '<div class="chips">' + C.PRESETS.map(function (p, i) { return injured() && p[1].indexOf(injured()) >= 0 ? '' : '<button class="chip go" data-act="preset" data-i="' + i + '">' + (recPreset(p[0]) ? '★ ' : '') + p[0] + '</button>'; }).join('') + '</div>' + (prof() ? '<p class="legend">★ conseillé pour ' + C.FREQS.filter(function (f) { return f[0] === PROFILE.freq; })[0][1] + '.</p>' : '') + fold('tl', 'Choisir dans la liste', tiles) + '</section>';
   var evBusy = activeEvent() || pendingWeek() || S.evq || S.evwarn, mo = S.open && S.open.more;
   var rq = ROUT.length ? '<div class="chips"><span class="legend" style="align-self:center;margin:0">Mes routines</span>' + ROUT.map(function (r) { return '<button class="chip go" data-act="rbstart" data-k="' + esc(r.id) + '">' + esc(r.name) + '</button>'; }).join('') + '</div>' : '';
   h = '<div class="row" style="justify-content:space-between"><button class="btn back" data-act="home">← Accueil</button><button class="chip" data-act="fold" data-k="more" aria-expanded="' + !!mo + '">Plus ' + (mo ? '▴' : '▾') + '</button></div>' + (evBusy ? evCard() : '') + weekCard() + rq + (mo ? (evBusy ? '' : evCard()) + planCard() + routinesCard() : '') + h;
@@ -3333,13 +3420,13 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.58';
+var APP_VER = 'v0.59';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
     '<h1>Bienvenue dans <span class="gtext">BeYourCoach</span></h1>' +
     '<p class="tag">Chaque séance compte. BeYourCoach s\'en souvient pour te faire progresser.</p>' +
-    '<p class="legend" style="margin-top:-6px">' + APP_VER + ' · bêta · <a href="#" data-act="upd">Vérifier les mises à jour</a></p>' +
+    '<p class="legend" style="margin-top:-6px">' + APP_VER + ' · bêta · <a href="#" data-act="upd">Vérifier les mises à jour</a></p><div class="chips" style="justify-content:center;align-items:center"><span class="legend" style="margin:0">Apparence</span>' + [['dark', 'Sombre'], ['light', 'Clair'], ['auto', 'Auto']].map(function (o) { return '<button class="chip" data-act="theme" data-v="' + o[0] + '" aria-pressed="' + ((lsGet('cds.theme') || 'dark') === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div>' +
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
     '<div class="acts">' +
     (d ? '<button class="btn primary big" data-act="enter">Continuer avec mon historique</button><p class="sub">' + model.sessions.length + ' séances · dernière ' + C.rel(model.last, now()) + '</p>' : '') +
@@ -3363,7 +3450,7 @@ function viewData() {
   var exN = Object.keys(model.ex).length;
   return profileCard() + '<section class="sec"><div><h2>Données</h2><p class="sub">' + model.sessions.length + ' séances, ' + exN + ' exercices, du ' + first + ' au ' + last + '.</p></div>' +
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
-    '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
+    '<div class="card">' + themeRow() + '</div>' + '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
     (seedCSV.trim() ? '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : effacer aussi mes nouvelles séances' : 'Revenir aux données d\'origine') + '</button></div>' : '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : tout effacer' : 'Effacer mes données') + '</button></div>') + '</div></section>' +
     '<section class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier workout_data.csv ci-dessus.</li></ol></section>' + backupCard() + exportCard() + legalCard();
 }
@@ -3586,7 +3673,7 @@ function viewWorkout() {
       (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
       '<div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' +
       e.sets.map(function (s, j) {
-        return '<div class="sg' + (s.ok ? ' ok' : '') + '"><span class="mono">' + (s.wu ? 'É' : (j + 1 - e.sets.filter(function (z) { return z.wu; }).length)) + '</span>' +
+        return '<div class="sg' + (s.ok ? ' ok' + (S.pop === i + '-' + j ? ' pop' : '') : '') + '"><span class="mono">' + (s.wu ? 'É' : (j + 1 - e.sets.filter(function (z) { return z.wu; }).length)) + '</span>' +
           '<input class="in" id="w-' + i + '-' + j + '" inputmode="decimal" data-f="w" data-i="' + i + '" data-j="' + j + '" value="' + s.w + '" aria-label="Charge en kg, série ' + (j + 1) + '">' +
           '<input class="in" id="r-' + i + '-' + j + '" inputmode="numeric" data-f="r" data-i="' + i + '" data-j="' + j + '" value="' + s.r + '" aria-label="Répétitions, série ' + (j + 1) + '">' +
           '<button class="btn ck" data-act="wset" data-i="' + i + '" data-j="' + j + '" aria-pressed="' + !!s.ok + '" aria-label="Valider la série ' + (j + 1) + '">✓</button>' +
@@ -3836,6 +3923,8 @@ document.addEventListener('click', function (e) {
   else if (a === 'wopen') { S.active.cur = wi; saveActive(); var oj = 0; S.active.exos[wi].sets.some(function (z, zj) { if (!z.ok) { oj = zj; return true; } return false; }); setTimeout(function () { var el = $('w-' + wi + '-' + oj); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); }
   else if (a === 'fold') { S.open = S.open || {}; S.open[k] = !S.open[k]; }
   else if (a === 'pt') { S.pt = k; }
+  else if (a === 'theme') { lsSet('cds.theme', b.getAttribute('data-v')); applyTheme(); }
+  else if (a === 'today') { var tp = todayPick((function () { var o = {}; C.MUSCLES.forEach(function (m) { o[m] = C.muscleStatus(model, m, now()); }); return o; })()); if (tp) { S.sel = tp.p[1].slice(); S.done = {}; S.xtra = []; S.xk = null; startWorkout(); window.scrollTo(0, 0); } }
   else if (a === 'upd') {
     e.preventDefault();
     toast('Vérification…');
@@ -3911,7 +4000,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'anim') { Anim.setPlaying(!Anim.isPlaying()); document.querySelectorAll('.figbox').forEach(function (f) { f.classList.toggle('paused', !Anim.isPlaying()); }); }
   else if (a === 'addx') { var xi = S.xtra.indexOf(k); if (xi >= 0) S.xtra.splice(xi, 1); else S.xtra.push(k); }
   else if (a === 'start') { startWorkout(); window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); }
-  else if (a === 'wset') { S.fmsg = null; var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok && !ss.wu) { if (S.active.exos[wi].ss) { S.active.lastOk = null; S.active.ssNote = true; } else { S.active.lastOk = Date.now(); S.active.restS = S.active.exos[wi].restS || 90; S.active.rested = false; S.active.ssNote = false; if (lsGet('cds.snd') === '1') unlockAudio(); } } S.wmsg = null; if (ss.ok && !ss.wu) { var tg = nextTarget(wi, wj); S.active.cur = tg ? tg[0] : wi; if (tg) setTimeout(function () { var el = $('w-' + tg[0] + '-' + tg[1]); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } else if (!ss.ok) S.active.cur = wi; saveActive(); }
+  else if (a === 'wset') { S.fmsg = null; var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok) { try { navigator.vibrate && navigator.vibrate(35); } catch (er) {} S.pop = wi + '-' + wj; setTimeout(function () { S.pop = null; }, 600); } if (ss.ok && !ss.wu) { if (S.active.exos[wi].ss) { S.active.lastOk = null; S.active.ssNote = true; } else { S.active.lastOk = Date.now(); S.active.restS = S.active.exos[wi].restS || 90; S.active.rested = false; S.active.ssNote = false; if (lsGet('cds.snd') === '1') unlockAudio(); } } S.wmsg = null; if (ss.ok && !ss.wu) { var tg = nextTarget(wi, wj); S.active.cur = tg ? tg[0] : wi; if (tg) setTimeout(function () { var el = $('w-' + tg[0] + '-' + tg[1]); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } else if (!ss.ok) S.active.cur = wi; saveActive(); }
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
   else if (a === 'why') S.wy = S.wy === k ? null : k;
   else if (a === 'wrep') { S.rep = S.rep === wi ? null : wi; S.confirm = null; }
