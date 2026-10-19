@@ -219,6 +219,16 @@ ol.how { margin: 0; padding-left: 20px; display: flex; flex-direction: column; g
 .sg.ok .in { background: transparent; border-color: var(--good); color: var(--good); }
 .sg.ok .btn.ck { background: var(--good); border-color: var(--good); color: #03140E; font-weight: 800; }
 .sg.ok > .mono { color: var(--good); font-weight: 700; }
+.sg.p { grid-template-columns: 22px minmax(0, 1.15fr) minmax(0, 1fr) minmax(0, 1fr) 42px 26px; gap: 5px; }
+.pv { border: 0; background: none; color: var(--muted); font: 500 12px var(--f-mono); padding: 8px 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-radius: 8px; }
+.pv:active { background: var(--line); }
+.sg.ok .pv { color: var(--good); }
+body.wk .topwrap { position: static; }
+.wband { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 8; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px 16px 10px; margin: 0 -16px; background: var(--bg); border-bottom: 1px solid var(--line); }
+.wband div { min-width: 0; }
+.wband span { display: block; font-size: 12px; color: var(--muted); }
+.wband b { display: block; font: 700 22px/1.15 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.wband .t b { color: var(--accent); }
 .btn.x { padding: 8px 0; color: var(--muted); font-size: 16px; line-height: 1; }
 textarea.csv { width: 100%; min-height: 120px; border: 1.5px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--ink); font: 11px/1.4 var(--f-mono); padding: 8px; }
 select.search { appearance: auto; }
@@ -3530,7 +3540,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.66';
+var APP_VER = 'v0.67';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3573,6 +3583,7 @@ function legalBar() {
   el.innerHTML = '<p><b>Avant de commencer.</b> Les conseils de BeYourCoach sont généraux et ne remplacent pas un avis médical. Consulte un médecin si tu as un doute, et arrête en cas de douleur. Tes données restent sur cet appareil. Détails dans Données, section Informations importantes.</p><button class="btn primary" data-act="legalok">J\'ai compris</button>';
 }
 function render() {
+  document.body.classList.toggle('wk', !!(S.active && S.tab === 'seance' && !S.onb && !S.home));
   legalBar();
   saveNav();
   var lg = $('blogo'); if (lg && !lg.getAttribute('src')) lg.setAttribute('src', window.LOGO_URI);
@@ -3781,11 +3792,18 @@ function restBarHTML() {
   var el = Date.now() - a.lastOk, t = (a.restS || 90) * 1000, done = el >= t;
   return '<div id="restbar" role="status" style="position:fixed;left:12px;right:12px;bottom:calc(72px + env(safe-area-inset-bottom,0px));z-index:6;border-radius:14px;padding:10px 12px;background:var(--surface);border:1.5px solid ' + (done ? 'var(--good)' : 'var(--line)') + ';box-shadow:0 8px 28px rgba(0,0,0,.6);display:flex;align-items:center;gap:10px"><div style="flex:1;min-width:0"><div id="rb-t" class="mono" style="font-size:16px;font-weight:700;color:' + (done ? 'var(--good)' : 'var(--ink)') + '">' + rbText(el, t) + '</div><div style="height:5px;border-radius:3px;background:var(--line);margin-top:6px;overflow:hidden"><div id="rb-f" style="height:100%;width:' + Math.min(100, el / t * 100) + '%;background:var(--grad)"></div></div></div><button class="chip" data-act="rb15">+15 s</button><button class="chip" data-act="rbskip">' + (done ? 'OK' : 'Passer') + '</button></div>';
 }
+function prevSets(name) {
+  var X = model.ex[name]; if (!X || !X.hist.length) return [];
+  return (X.hist[X.hist.length - 1].sets || []).filter(function (s) { return s.t !== 'warmup'; });
+}
+function prevTxt(s) { return (s.w > 0 ? kg(s.w) + '×' : '') + s.r; }
 function viewWorkout() {
   var a = S.active, total = 0, okn = 0;
   a.exos.forEach(function (e) { e.sets.forEach(function (s) { if (s.wu) return; total++; if (s.ok) okn++; }); });
-  var h = '<section class="sec"><div class="card"><div class="lab">En cours · ' + esc(a.title) + '</div><div class="clock" id="tm">' + clock(Date.now() - a.t0) + '</div>' +
-    '<div class="row"><span class="sub" id="rest">' + restText() + '</span><span class="mono sub">' + okn + '/' + total + ' séries</span></div>' +
+  var vol = 0; a.exos.forEach(function (e) { e.sets.forEach(function (s) { if (s.ok && !s.wu) vol += (s.w > 0 ? s.w : 0) * (s.r > 0 ? s.r : 0); }); });
+  var h = '<div class="wband" id="wband"><div class="t"><span>Durée</span><b id="tm">' + clock(Date.now() - a.t0) + '</b></div><div><span>Volume</span><b>' + Math.round(vol).toLocaleString('fr-FR') + ' kg</b></div><div><span>Séries</span><b>' + okn + '<small style="font-size:14px;color:var(--muted);font-weight:500">/' + total + '</small></b></div></div>' +
+    '<section class="sec"><div class="card"><div class="lab">En cours · ' + esc(a.title) + '</div>' +
+    '<div class="row"><span class="sub" id="rest">' + restText() + '</span></div>' +
     (S.rsv ? '<div class="row"><input class="fin" id="rs-name" type="text" maxlength="40" placeholder="Nom de la routine" value="' + esc(S.rsvName == null ? a.title : S.rsvName) + '" aria-label="Nom de la routine"><button class="btn primary" data-act="rsvgo">Enregistrer</button></div>' : '') +
     (S.wmsg ? '<div class="msg err">' + esc(S.wmsg) + '</div>' : '') +
     '<div class="row" style="flex-wrap:wrap"><button class="chip" style="white-space:nowrap" data-act="fold" data-k="wopt" aria-expanded="' + !!(S.open && S.open.wopt) + '">Options ' + (S.open && S.open.wopt ? '▴' : '▾') + '</button></div>' + (S.open && S.open.wopt ? '<div class="chips"><button class="chip" data-act="rsv" aria-expanded="' + !!S.rsv + '">Enregistrer comme routine</button><button class="chip" data-act="snd" aria-pressed="' + (lsGet('cds.snd') === '1') + '">Son à la fin du repos</button></div>' : '') + '</div></section>';
@@ -3803,10 +3821,12 @@ function viewWorkout() {
         '<div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
       ((S.open && S.open['o' + i]) ? '<div class="chips"><button class="chip" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="chip" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div>' + toolsHTML(e, i) : '') + (S.pl === i ? platesHTML(e) : '') +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
-      (e.last ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
-      '<div class="sg sh"><span></span><span>kg</span><span>reps</span><span></span><span></span></div>' +
+      (e.last && !prevSets(e.name).length ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
+      '<div class="sg p sh"><span>N°</span><span>Préc.</span><span>kg</span><span>reps</span><span></span><span></span></div>' +
       e.sets.map(function (s, j) {
-        return '<div class="sg' + (s.ok ? ' ok' + (S.pop === i + '-' + j ? ' pop' : '') : '') + '"><span class="mono">' + (s.wu ? 'É' : (j + 1 - e.sets.filter(function (z) { return z.wu; }).length)) + '</span>' +
+        var wuN = e.sets.slice(0, j).filter(function (z) { return z.wu; }).length, pv = s.wu ? null : prevSets(e.name)[j - wuN];
+        return '<div class="sg p' + (s.ok ? ' ok' + (S.pop === i + '-' + j ? ' pop' : '') : '') + '"><span class="mono">' + (s.wu ? 'É' : (j + 1 - e.sets.filter(function (z) { return z.wu; }).length)) + '</span>' +
+          (pv ? '<button class="pv" data-act="wprev" data-i="' + i + '" data-j="' + j + '" aria-label="Reprendre la série précédente : ' + esc(prevTxt(pv)) + '">' + esc(prevTxt(pv)) + '</button>' : '<span class="pv" style="text-align:center">—</span>') +
           '<input class="in" id="w-' + i + '-' + j + '" inputmode="decimal" data-f="w" data-i="' + i + '" data-j="' + j + '" value="' + s.w + '" aria-label="Charge en kg, série ' + (j + 1) + '">' +
           '<input class="in" id="r-' + i + '-' + j + '" inputmode="numeric" data-f="r" data-i="' + i + '" data-j="' + j + '" value="' + s.r + '" aria-label="Répétitions, série ' + (j + 1) + '">' +
           '<button class="btn ck" data-act="wset" data-i="' + i + '" data-j="' + j + '" aria-pressed="' + !!s.ok + '" aria-label="Valider la série ' + (j + 1) + '">✓</button>' +
@@ -4152,6 +4172,7 @@ document.addEventListener('click', function (e) {
   else if (a === 'addx') { var xi = S.xtra.indexOf(k); if (xi >= 0) S.xtra.splice(xi, 1); else S.xtra.push(k); }
   else if (a === 'start') { startWorkout(); window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); }
   else if (a === 'wset') { S.fmsg = null; var ss = S.active.exos[wi].sets[wj]; ss.ok = !ss.ok; if (ss.ok) { try { navigator.vibrate && navigator.vibrate(35); } catch (er) {} S.pop = wi + '-' + wj; setTimeout(function () { S.pop = null; }, 600); } if (ss.ok && !ss.wu) { if (S.active.exos[wi].ss) { S.active.lastOk = null; S.active.ssNote = true; } else { S.active.lastOk = Date.now(); S.active.restS = S.active.exos[wi].restS || 90; S.active.rested = false; S.active.ssNote = false; if (lsGet('cds.snd') === '1') unlockAudio(); } } S.wmsg = null; if (ss.ok && !ss.wu) { var tg = nextTarget(wi, wj); S.active.cur = tg ? tg[0] : wi; if (tg) setTimeout(function () { var el = $('w-' + tg[0] + '-' + tg[1]); if (el && el.scrollIntoView) el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }, 80); } else if (!ss.ok) S.active.cur = wi; saveActive(); }
+  else if (a === 'wprev') { var pe = S.active.exos[wi], wn = pe.sets.slice(0, wj).filter(function (z) { return z.wu; }).length, ps = prevSets(pe.name)[wj - wn]; if (ps) { pe.sets[wj].w = ps.w > 0 ? ps.w : 0; pe.sets[wj].r = ps.r; saveActive(); } }
   else if (a === 'wadd') { var ar = S.active.exos[wi].sets, lst = ar[ar.length - 1] || { w: 0, r: 8 }; ar.push({ w: lst.w, r: lst.r, ok: false }); saveActive(); }
   else if (a === 'why') S.wy = S.wy === k ? null : k;
   else if (a === 'wrep') { S.rep = S.rep === wi ? null : wi; S.confirm = null; }
