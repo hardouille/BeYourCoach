@@ -274,6 +274,13 @@ ul.how { margin: 0; padding-left: 20px; display: flex; flex-direction: column; g
 .lg { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; margin: 0 0 8px; }
 .lg summary { cursor: pointer; font-weight: 600; }
 .lg .why { margin: 8px 0 0; }
+#aifab { position: fixed; right: max(12px, env(safe-area-inset-right, 0px)); bottom: calc(84px + env(safe-area-inset-bottom, 0px)); z-index: 20; border: 0; border-radius: 999px; padding: 12px 16px; background: var(--grad); color: #03140E; font: 700 14px var(--f-body); box-shadow: 0 8px 24px rgba(0,0,0,.55); display: flex; align-items: center; gap: 6px; }
+body.wkr #aifab { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
+#aifab[hidden] { display: none; }
+#aisheet { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; justify-content: center; }
+#aisheet .in-box { width: 100%; max-width: 560px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 18px 18px 0 0; padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 12px; max-height: 92vh; overflow: auto; }
+#aisheet textarea { width: 100%; min-height: 74px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: 15px/1.4 var(--f-body); padding: 10px; resize: vertical; }
+#aisheet pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.45 var(--f-mono); color: var(--muted); max-height: 200px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
 #updbar { position: fixed; left: 12px; right: 12px; top: calc(10px + env(safe-area-inset-top, 0px)); z-index: 50; max-width: 560px; margin: 0 auto; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 14px; padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.55); display: flex; flex-direction: column; gap: 10px; }
 #updbar p { margin: 0; font-size: 14px; }
 #instsheet { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; justify-content: center; }
@@ -2830,7 +2837,7 @@ function historySection() {
     }).join('');
     if (S.he && S.he.id === se.id) return row + heditHTML(se);
     var own = logIdx(se) >= 0, acts = own ? '<div class="row"><button class="btn" data-act="hedit" data-k="' + esc(se.id) + '">Modifier</button><button class="btn' + (S.confirm === 'hdel' ? ' primary' : '') + '" data-act="hdel" data-k="' + esc(se.id) + '">' + (S.confirm === 'hdel' ? 'Confirmer la suppression' : 'Supprimer') + '</button></div>' : '';
-    return row + '<div class="detail">' + det + acts + '</div>';
+    return row + '<div class="detail">' + det + '<div class="chips"><button class="chip" data-act="aihist" data-k="' + esc(se.id) + '">✦ Analyser avec l\'IA</button></div>' + acts + '</div>';
   }).join('') + '</div>';
   if (all.length > S.hn) h += '<button class="btn" data-act="hmore">Voir plus (' + (all.length - S.hn) + ' restantes)</button>';
   return h + '</section>';
@@ -3550,7 +3557,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.69';
+var APP_VER = 'v0.70';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3584,6 +3591,105 @@ function viewData() {
     '<div class="card">' + themeRow() + '</div>' + installCard(true) + '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
     (seedCSV.trim() ? '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : effacer aussi mes nouvelles séances' : 'Revenir aux données d\'origine') + '</button></div>' : '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : tout effacer' : 'Effacer mes données') + '</button></div>') + '</div></section>' +
     '<section class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier workout_data.csv ci-dessus.</li></ol></section>' + backupCard() + exportCard() + legalCard();
+}
+
+/* ---------- assistant IA : prépare la question avec le contexte et ouvre l'IA de l'utilisateur (son propre compte) ---------- */
+var AIP = [
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new', q: 'q' },
+  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', q: 'q' },
+  { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app', q: null }
+];
+var AIQ = {
+  exo: ['Explique-moi comment bien exécuter cet exercice.', 'Pourquoi cette charge et ces répétitions ?', 'Comment progresser sur cet exercice ?', 'Quelle alternative si j\'ai mal ou pas le matériel ?'],
+  work: ['Explique-moi cette séance : pourquoi ces exercices dans cet ordre ?', 'Comment gérer mes temps de repos ?', 'Où en suis-je dans cette séance, que dois-je ajuster ?'],
+  seance: ['Explique-moi cette séance : pourquoi ces exercices ?', 'Comment m\'échauffer pour cette séance ?', 'Cette séance est-elle adaptée à mon objectif ?', 'Que manger avant et après ?'],
+  hist: ['Analyse cette séance.', 'Qu\'aurais-je pu faire mieux ?', 'Que travailler la prochaine fois ?'],
+  gen: ['Où en suis-je dans ma progression ?', 'Que dois-je améliorer en priorité ?', 'Ai-je assez de récupération ?']
+};
+function aiSets(sets) { return sets.map(function (x) { return (x.w > 0 ? kg(x.w) + '×' : '') + x.r; }).join(', '); }
+function aiExoLine(name) {
+  var X = model.ex[name], e = LIBMAP[name], m = (X && X.muscle) || (e && e.m) || '', L = [name + (m ? ' (' + m + ')' : '')];
+  if (X && X.hist.length) {
+    L.push('Dernières séances : ' + X.hist.slice(-3).reverse().map(function (h) { return C.fmtDate(h.t) + ' ' + aiSets(h.sets); }).join(' ; ') + '.');
+    var best = X.hist.reduce(function (b, h) { return h.score > b ? h.score : b; }, 0); if (best > 0) L.push('Meilleure estimation : ' + Math.round(best) + (X.bw ? ' reps' : ' kg pour 1 répétition') + '.');
+  } else L.push('Exercice nouveau pour moi.');
+  return L.join(' ');
+}
+function aiCtx(over) {
+  var n = now(), a = S.active, kind = 'gen', label = 'Ton suivi', L = [], k = over && over.kind, nm = over && over.name;
+  if (k === 'exo' && nm) { kind = 'exo'; label = nm; L.push('Exercice : ' + aiExoLine(nm)); }
+  else if (k === 'hist' && over.id) {
+    var se = model.sessions.filter(function (z) { return z.id === over.id; })[0];
+    if (se) { kind = 'hist'; label = 'Séance du ' + C.fmtDate(se.t); L.push('Séance du ' + C.fmtDate(se.t) + ' (' + se.title + ') :'); se.eo.slice(0, 10).forEach(function (x) { var w = se.exos[x].sets.filter(function (z) { return z.t !== 'warmup'; }); if (w.length) L.push('- ' + x + ' : ' + aiSets(w)); }); }
+  }
+  if (kind === 'gen' && a && S.tab === 'seance') {
+    kind = 'work'; label = 'Séance en cours'; var cu = a.exos[wcur(a)];
+    L.push('Séance en cours : ' + a.title + ' (depuis ' + Math.max(1, Math.round((Date.now() - a.t0) / 60000)) + ' min).');
+    a.exos.slice(0, 10).forEach(function (e) { var ok = e.sets.filter(function (z) { return z.ok && !z.wu; }), tot = e.sets.filter(function (z) { return !z.wu; }).length; L.push('- ' + e.name + ' : ' + ok.length + '/' + tot + ' séries' + (ok.length ? ' (' + aiSets(ok) + ')' : '') + (e === cu ? ' [en cours]' : '')); });
+    if (cu) { kind = 'exo'; label = cu.name; L.push('Exercice en cours : ' + aiExoLine(cu.name)); }
+  }
+  if (kind === 'gen' && S.tab === 'seance' && S.sel && S.sel.length) {
+    var rec = C.recommend(model, SEL(), n, ropts()); kind = 'seance'; label = 'Séance proposée : ' + SEL().join(' + ');
+    L.push('Séance proposée (' + SEL().join(' + ') + ') :'); rec.items.slice(0, 8).forEach(function (it) { L.push('- ' + it.name + ' : ' + it.sets + '×' + it.reps + (it.w > 0 ? ' à ' + kg(it.w) + ' kg' : '') + ', repos ' + it.restTxt); });
+  }
+  if (kind === 'gen' && S.tab === 'exos' && S.fiche) { kind = 'exo'; label = S.fiche; L.push('Exercice : ' + aiExoLine(S.fiche)); }
+  if (kind === 'gen' && hasData()) {
+    var ws = C.weekly(model, n, 4), pr = C.progress(model, n);
+    L.push('Mes 4 dernières semaines : ' + ws.map(function (w) { return w.sessions + ' séance' + (w.sessions > 1 ? 's' : '') + '/' + w.sets + ' séries'; }).join(', ') + '.');
+    if (pr.gains.length) L.push('Exercices qui progressent : ' + pr.gains.slice(0, 3).map(function (g) { return g.ex.name; }).join(', ') + '.');
+    if (pr.plateaus.length) L.push('Exercices qui stagnent : ' + pr.plateaus.slice(0, 3).map(function (g) { return g.ex.name; }).join(', ') + '.');
+  }
+  return { kind: kind, label: label, text: L.join('\n').slice(0, 1300), quick: AIQ[kind] || AIQ.gen };
+}
+function aiProfile() {
+  var p = prof(); if (!p) return '';
+  var lv = LV(), g = { perte: 'perdre du poids', muscle: 'prendre du muscle', maintien: 'rester en forme' }[p.goal] || p.goal;
+  return 'Mon profil : ' + (p.sex === 'H' ? 'homme' : p.sex === 'F' ? 'femme' : 'adulte') + ', ' + p.age + ' ans, ' + p.h + ' cm, ' + String(p.w).replace('.', ',') + ' kg, objectif : ' + g + ', niveau ' + (lv === 'debutant' ? 'débutant' : lv === 'inter' ? 'intermédiaire' : 'avancé') + '.';
+}
+function aiPrompt() {
+  var A = S.ai, c = A.c, q = (A.q || '').trim() || (c.quick[0] || 'Explique-moi.');
+  return 'Tu es un coach de musculation bienveillant et précis. Réponds en français, simplement et avec des conseils concrets et prudents (tu ne donnes pas d\'avis médical).\n\n' + (A.prof ? (aiProfile() ? aiProfile() + '\n\n' : '') : '') + (c.text ? 'Contexte (données de mon app BeYourCoach) :\n' + c.text + '\n\n' : '') + 'Ma question : ' + q;
+}
+function aiUrl(pv, text) {
+  if (!pv.q) return pv.url;
+  var u = pv.url + '?' + pv.q + '=' + encodeURIComponent(text);
+  return text.length <= 1900 ? u : pv.url;
+}
+function showAI(over) {
+  var prev = S.ai || {};
+  S.ai = { c: aiCtx(over), q: '', prof: prev.prof !== false, prov: lsGet('cds.aiprov') || prev.prov || 'claude', fold: false };
+  renderAI();
+}
+function renderAI() {
+  var A = S.ai; if (!A) return;
+  var el = document.getElementById('aisheet'), pv = AIP.filter(function (x) { return x.id === A.prov; })[0] || AIP[0];
+  var txt = aiPrompt();
+  var html = '<div class="in-box" id="aibox"><div class="row" style="justify-content:space-between"><div><div class="ename">Assistant IA</div><div class="legend" style="margin:0">' + esc(A.c.label) + '</div></div><button class="chip" data-act="aiclose" aria-label="Fermer">✕</button></div>' +
+    '<div class="lab">Ton IA</div><div class="chips">' + AIP.map(function (x) { return '<button class="chip' + (x.id === A.prov ? ' go' : '') + '" data-act="aiprov" data-k="' + x.id + '" aria-pressed="' + (x.id === A.prov) + '">' + x.name + '</button>'; }).join('') + '</div>' +
+    '<div class="lab">Ta question</div><div class="chips">' + A.c.quick.map(function (qq, i) { return '<button class="chip" data-act="aiq" data-i="' + i + '">' + esc(qq) + '</button>'; }).join('') + '</div>' +
+    '<textarea id="ai-q" placeholder="Écris ta question, ou touche une suggestion…" aria-label="Ta question">' + esc(A.q) + '</textarea>' +
+    (prof() ? '<button class="chip" data-act="aiprof" aria-pressed="' + !!A.prof + '" style="align-self:flex-start">' + (A.prof ? '✓ ' : '') + 'Inclure mon profil (âge, poids, objectif)</button>' : '') +
+    '<button class="btn primary big" data-act="aigo">Poser la question à ' + pv.name + '</button>' +
+    '<p class="legend" style="margin:0">' + (pv.q ? 'Ton compte ' + pv.name + ' s\'ouvre avec la question prête. Si elle n\'apparaît pas, colle-la : elle est copiée.' : 'Ton compte ' + pv.name + ' s\'ouvre et la question est copiée : colle-la dans la conversation.') + ' Seul ce texte est transmis, et seulement quand tu valides chez ton IA. Pas un avis médical.</p>' +
+    '<button class="chip" data-act="aifold" aria-expanded="' + !!A.fold + '" style="align-self:flex-start">Voir le texte envoyé ' + (A.fold ? '▴' : '▾') + '</button>' + (A.fold ? '<pre>' + esc(txt) + '</pre><button class="btn" data-act="aicopy">Copier le texte</button>' : '') + '</div>';
+  if (!el) { el = document.createElement('div'); el.id = 'aisheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Assistant IA'); el.addEventListener('click', function (ev) { if (ev.target === el) hideAI(); }); document.body.appendChild(el); }
+  var sc = el.firstChild ? el.firstChild.scrollTop : 0; el.innerHTML = html; if (el.firstChild) el.firstChild.scrollTop = sc;
+}
+function hideAI() { var el = document.getElementById('aisheet'); if (el) el.remove(); S.ai = null; }
+function aiCopy(txt, cb) { try { navigator.clipboard.writeText(txt).then(function () { cb(true); }, function () { cb(false); }); } catch (e) { cb(false); } }
+function aiGo() {
+  var A = S.ai; if (!A) return;
+  var q = document.getElementById('ai-q'); if (q) A.q = q.value;
+  var pv = AIP.filter(function (x) { return x.id === A.prov; })[0] || AIP[0], txt = aiPrompt();
+  lsSet('cds.aiprov', A.prov);
+  aiCopy(txt, function (ok) { toast(ok ? 'Question copiée. ' + (pv.q ? '' : 'Colle-la dans ' + pv.name + '.') : 'Copie bloquée : touche « Voir le texte envoyé » pour la copier à la main.', !ok); });
+  window.open(aiUrl(pv, txt), '_blank', 'noopener');
+}
+function aiFab() {
+  var f = document.getElementById('aifab');
+  if (!f) { f = document.createElement('button'); f.id = 'aifab'; f.setAttribute('data-act', 'ai'); f.setAttribute('aria-label', 'Poser une question à l\'IA'); f.innerHTML = '<span aria-hidden="true">✦</span> IA'; document.body.appendChild(f); }
+  f.hidden = !!(S.onb || S.home || document.getElementById('aisheet'));
+  document.body.classList.toggle('wkr', !!(S.active && S.active.lastOk && S.tab === 'seance'));
 }
 
 /* ---------- mise à jour automatique, avec avertissement avant ---------- */
@@ -3647,6 +3753,7 @@ function legalBar() {
   el.innerHTML = '<p><b>Avant de commencer.</b> Les conseils de BeYourCoach sont généraux et ne remplacent pas un avis médical. Consulte un médecin si tu as un doute, et arrête en cas de douleur. Tes données restent sur cet appareil. Détails dans Données, section Informations importantes.</p><button class="btn primary" data-act="legalok">J\'ai compris</button>';
 }
 function render() {
+  try { aiFab(); } catch (e) {}
   document.body.classList.toggle('wk', !!(S.active && S.tab === 'seance' && !S.onb && !S.home));
   legalBar();
   saveNav();
@@ -3883,7 +3990,7 @@ function viewWorkout() {
       (S.rep === i ? '<div class="msg tip"><div class="lab">Remplacer par un exercice proche</div><div class="chips">' + altsFor(i).map(function (n) { return '<button class="chip go" data-act="wrepdo" data-i="' + i + '" data-k="' + esc(n) + '">' + esc(n) + '</button>'; }).join('') + '</div><div class="lab">Ou choisis librement</div><select class="search repsel" data-i="' + i + '" aria-label="Choisir un autre exercice"><option value="">Un exercice de la bibliothèque…</option>' + C.MUSCLES.map(function (m) { return '<optgroup label="' + m + '">' + LIB.filter(function (x) { return x.m === m; }).sort(function (x, y) { return x.n < y.n ? -1 : 1; }).map(function (x) { return '<option value="' + esc(x.n) + '">' + esc(x.n) + '</option>'; }).join('') + '</optgroup>'; }).join('') + '</select>' +
         '<div class="lab">Ou écris ton propre exercice</div><div class="fgrid"><input class="fin" id="rep-free" type="text" placeholder="Nom de l\'exercice" aria-label="Nom de ton exercice"><select class="fin" id="rep-mu" aria-label="Muscle travaillé">' + C.MUSCLES.map(function (m) { return '<option' + (m === curMuscle(e.name) ? ' selected' : '') + '>' + m + '</option>'; }).join('') + '</select></div><button class="btn" data-act="wrepfree" data-i="' + i + '">Utiliser cet exercice</button>' +
         '<div class="chips"><button class="chip" data-act="wrm" data-i="' + i + '">' + (S.confirm === 'rm' + i ? 'Confirmer le retrait' : 'Retirer de la séance') + '</button></div></div>' : '') +
-      ((S.open && S.open['o' + i]) ? '<div class="chips"><button class="chip" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="chip" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button></div>' + toolsHTML(e, i) : '') + (S.pl === i ? platesHTML(e) : '') +
+      ((S.open && S.open['o' + i]) ? '<div class="chips"><button class="chip" data-act="why" data-k="' + esc(e.name) + '" aria-expanded="' + (S.wy === e.name) + '">Pourquoi ?</button><button class="chip" data-act="wrep" data-i="' + i + '" aria-expanded="' + (S.rep === i) + '">Remplacer</button><button class="chip" data-act="aiexo" data-k="' + esc(e.name) + '">✦ Demander à l\'IA</button></div>' + toolsHTML(e, i) : '') + (S.pl === i ? platesHTML(e) : '') +
       (S.wf === e.name ? ficheHTML(e.name) : '') +
       (e.last && !prevSets(e.name).length ? '<div class="hist">Dernière fois : ' + esc(e.last) + '</div>' : '') + (e.hint ? '<div class="hist">' + esc(e.hint) + '</div>' : '') +
       '<div class="sg p sh"><span>N°</span><span>Préc.</span><span>kg</span><span>reps</span><span></span><span></span></div>' +
@@ -4143,6 +4250,16 @@ document.addEventListener('click', function (e) {
   else if (a === 'bodytap') { bodyTap(b, e); return; }
   else if (a === 'theme') { lsSet('cds.theme', b.getAttribute('data-v')); applyTheme(); }
   else if (a === 'today') { var tp = todayPick((function () { var o = {}; C.MUSCLES.forEach(function (m) { o[m] = C.muscleStatus(model, m, now()); }); return o; })()); if (tp) { S.sel = tp.p[1].slice(); S.done = {}; S.xtra = []; S.xk = null; startWorkout(); window.scrollTo(0, 0); } }
+  else if (a === 'ai') { showAI(); aiFab(); return; }
+  else if (a === 'aiclose') { hideAI(); aiFab(); return; }
+  else if (a === 'aiprov') { S.ai.prov = k; renderAI(); return; }
+  else if (a === 'aiq') { S.ai.q = S.ai.c.quick[wi] || ''; renderAI(); return; }
+  else if (a === 'aiprof') { S.ai.prof = !S.ai.prof; renderAI(); return; }
+  else if (a === 'aifold') { S.ai.fold = !S.ai.fold; renderAI(); return; }
+  else if (a === 'aicopy') { var tx = document.getElementById('ai-q'); if (tx) S.ai.q = tx.value; aiCopy(aiPrompt(), function (ok) { toast(ok ? 'Texte copié.' : 'Copie bloquée par ce navigateur.', !ok); }); return; }
+  else if (a === 'aigo') { aiGo(); return; }
+  else if (a === 'aiexo') { showAI({ kind: 'exo', name: k }); aiFab(); return; }
+  else if (a === 'aihist') { showAI({ kind: 'hist', id: k }); aiFab(); return; }
   else if (a === 'upd') { e.preventDefault(); toast('Vérification…'); checkUpdate(true); return; }
   else if (a === 'updgo') { var uel = document.getElementById('updbar'); if (uel) uel.remove(); applyUpdate(+k); return; }
   else if (a === 'updno') { var uel2 = document.getElementById('updbar'), uv = uel2 && uel2.querySelector('[data-act=updgo]'); UPD.no = uv ? +uv.getAttribute('data-k') : 0; if (uel2) uel2.remove(); return; }
@@ -4258,6 +4375,7 @@ document.addEventListener('click', function (e) {
 });
 document.addEventListener('input', function (e) {
   if (e.target.id === 'q') { S.q = e.target.value; render(); return; }
+  if (e.target.id === 'ai-q' && S.ai) { S.ai.q = e.target.value; return; }
   if (e.target.id === 'chatin') { S.draft = e.target.value; return; }
   if (e.target.id === 'rb-name' && S.rb) { S.rb.name = e.target.value; return; }
   if (e.target.id === 'rs-name') { S.rsvName = e.target.value; return; }
