@@ -279,7 +279,15 @@ body.wkr #aifab { bottom: calc(150px + env(safe-area-inset-bottom, 0px)); }
 #aifab[hidden] { display: none; }
 #aisheet { position: fixed; inset: 0; z-index: 45; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; justify-content: center; }
 #aisheet .in-box { width: 100%; max-width: 560px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 18px 18px 0 0; padding: 16px max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 12px; max-height: 92vh; overflow: auto; }
-#aisheet textarea { width: 100%; min-height: 74px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: 15px/1.4 var(--f-body); padding: 10px; resize: vertical; }
+#aisheet a.btn { color: var(--accent); text-decoration: none; font-weight: 600; display: inline-block; }
+#aisheet .in-box.chat { height: min(88vh, 720px); }
+#aimsgs { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; gap: 10px; padding: 2px 0; }
+.aibub { max-width: 90%; padding: 10px 12px; border-radius: 14px; font-size: 14.5px; line-height: 1.5; overflow-wrap: anywhere; }
+.aibub.u { align-self: flex-end; background: var(--accent-soft); border: 1px solid var(--accent); white-space: pre-wrap; }
+.aibub.a { align-self: flex-start; background: var(--bg); border: 1px solid var(--line); }
+.aibub p { margin: 0 0 8px; } .aibub p:last-child, .aibub ul:last-child, .aibub ol:last-child { margin-bottom: 0; }
+.aibub ul, .aibub ol { margin: 0 0 8px; padding-left: 20px; }
+#aisheet textarea { width: 100%; min-height: 44px; max-height: 120px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: 15px/1.4 var(--f-body); padding: 10px; resize: vertical; }
 #aisheet pre { margin: 0; white-space: pre-wrap; word-break: break-word; font: 12px/1.45 var(--f-mono); color: var(--muted); max-height: 200px; overflow: auto; background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 10px; }
 #updbar { position: fixed; left: 12px; right: 12px; top: calc(10px + env(safe-area-inset-top, 0px)); z-index: 50; max-width: 560px; margin: 0 auto; background: var(--surface); border: 1.5px solid var(--accent); border-radius: 14px; padding: 12px; box-shadow: 0 10px 30px rgba(0,0,0,.55); display: flex; flex-direction: column; gap: 10px; }
 #updbar p { margin: 0; font-size: 14px; }
@@ -3557,7 +3565,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.70';
+var APP_VER = 'v0.71';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3595,10 +3603,11 @@ function viewData() {
 
 /* ---------- assistant IA : prépare la question avec le contexte et ouvre l'IA de l'utilisateur (son propre compte) ---------- */
 var AIP = [
-  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new', q: 'q' },
-  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', q: 'q' },
-  { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app', q: null }
+  { id: 'claude', name: 'Claude', url: 'https://claude.ai/new', q: 'q', keyUrl: 'https://console.anthropic.com/settings/keys', cost: 'Payant à l\'usage : quelques centimes par question.', model: 'claude-haiku-5-5' },
+  { id: 'chatgpt', name: 'ChatGPT', url: 'https://chatgpt.com/', q: 'q', keyUrl: 'https://platform.openai.com/api-keys', cost: 'Payant à l\'usage : quelques centimes par question (l\'API est facturée à part de l\'abonnement ChatGPT).', model: 'gpt-4o-mini' },
+  { id: 'gemini', name: 'Gemini', url: 'https://gemini.google.com/app', q: null, keyUrl: 'https://aistudio.google.com/apikey', cost: 'Gratuit dans la limite d\'un quota quotidien.', model: 'gemini-flash-latest' }
 ];
+var AIMSG = [];
 var AIQ = {
   exo: ['Explique-moi comment bien exécuter cet exercice.', 'Pourquoi cette charge et ces répétitions ?', 'Comment progresser sur cet exercice ?', 'Quelle alternative si j\'ai mal ou pas le matériel ?'],
   work: ['Explique-moi cette séance : pourquoi ces exercices dans cet ordre ?', 'Comment gérer mes temps de repos ?', 'Où en suis-je dans cette séance, que dois-je ajuster ?'],
@@ -3660,20 +3669,83 @@ function showAI(over) {
   S.ai = { c: aiCtx(over), q: '', prof: prev.prof !== false, prov: lsGet('cds.aiprov') || prev.prov || 'claude', fold: false };
   renderAI();
 }
+function aiPv(id) { return AIP.filter(function (x) { return x.id === id; })[0] || AIP[0]; }
+function aiKey(id) { return lsGet('cds.ai.k.' + id) || ''; }
+function aiSystem() {
+  var A = S.ai, c = A.c;
+  return 'Tu es le coach intégré à l\'application de musculation BeYourCoach. Réponds en français, de façon claire, concrète et courte (moins de 200 mots sauf si on te demande plus). Tu donnes des conseils prudents et tu ne fais pas d\'avis médical : en cas de douleur ou de doute de santé, conseille de voir un professionnel. Format simple : phrases courtes, listes à puces si utile, pas de tableau.' +
+    (A.prof && aiProfile() ? '\n\n' + aiProfile() : '') + (c.text ? '\n\nContexte (données de l\'app) :\n' + c.text : '');
+}
+function aiCall(pv, key, system, msgs) {
+  var H = { 'content-type': 'application/json' }, url, body;
+  var role = function (m) { return m.r === 'u' ? 'user' : 'assistant'; };
+  if (pv.id === 'claude') {
+    url = 'https://api.anthropic.com/v1/messages'; H['x-api-key'] = key; H['anthropic-version'] = '2023-06-01'; H['anthropic-dangerous-direct-browser-access'] = 'true';
+    body = { model: pv.model, max_tokens: 900, system: system, messages: msgs.map(function (m) { return { role: role(m), content: m.t }; }) };
+  } else if (pv.id === 'chatgpt') {
+    url = 'https://api.openai.com/v1/chat/completions'; H.authorization = 'Bearer ' + key;
+    body = { model: pv.model, max_tokens: 900, messages: [{ role: 'system', content: system }].concat(msgs.map(function (m) { return { role: role(m), content: m.t }; })) };
+  } else {
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/' + pv.model + ':generateContent'; H['x-goog-api-key'] = key;
+    body = { system_instruction: { parts: [{ text: system }] }, contents: msgs.map(function (m) { return { role: m.r === 'u' ? 'user' : 'model', parts: [{ text: m.t }] }; }), generationConfig: { maxOutputTokens: 2000 } };
+  }
+  return fetch(url, { method: 'POST', headers: H, body: JSON.stringify(body) }).then(function (res) {
+    return res.json().catch(function () { return {}; }).then(function (j) {
+      if (!res.ok) {
+        var m = j && j.error && (j.error.message || j.error), st = res.status;
+        throw new Error(st === 401 || st === 403 || /api.?key/i.test(String(m)) ? 'Clé refusée par ' + pv.name + '. Vérifie-la dans les réglages ⚙.' : st === 429 ? 'Quota ou limite atteinte chez ' + pv.name + '. Réessaie plus tard.' : 'Erreur ' + pv.name + (m ? ' : ' + String(m).slice(0, 140) : ' (' + st + ')') + '.');
+      }
+      var t = '';
+      if (pv.id === 'claude') t = (j.content || []).map(function (x) { return x.text || ''; }).join('');
+      else if (pv.id === 'chatgpt') t = (((j.choices || [])[0] || {}).message || {}).content || '';
+      else t = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(function (x) { return x.text || ''; }).join('');
+      if (!t) throw new Error('Réponse vide de ' + pv.name + '. Réessaie.');
+      return t;
+    });
+  });
+}
+function aiMd(t) {
+  var out = [], list = null, ord = false;
+  var inl = function (x) { return esc(x).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>'); };
+  var flush = function () { if (list) { out.push('<' + (ord ? 'ol' : 'ul') + '>' + list.join('') + '</' + (ord ? 'ol' : 'ul') + '>'); list = null; } };
+  String(t).split('\n').forEach(function (ln) {
+    var m = /^\s*[-*•]\s+(.*)/.exec(ln), o = /^\s*\d+[.)]\s+(.*)/.exec(ln), h = /^\s*#{1,4}\s+(.*)/.exec(ln);
+    if (m || o) { var isO = !!o; if (list && ord !== isO) flush(); if (!list) { list = []; ord = isO; } list.push('<li>' + inl((m || o)[1]) + '</li>'); }
+    else { flush(); if (h) out.push('<p><b>' + inl(h[1]) + '</b></p>'); else if (ln.trim()) out.push('<p>' + inl(ln) + '</p>'); }
+  });
+  flush(); return out.join('');
+}
 function renderAI() {
   var A = S.ai; if (!A) return;
-  var el = document.getElementById('aisheet'), pv = AIP.filter(function (x) { return x.id === A.prov; })[0] || AIP[0];
-  var txt = aiPrompt();
-  var html = '<div class="in-box" id="aibox"><div class="row" style="justify-content:space-between"><div><div class="ename">Assistant IA</div><div class="legend" style="margin:0">' + esc(A.c.label) + '</div></div><button class="chip" data-act="aiclose" aria-label="Fermer">✕</button></div>' +
-    '<div class="lab">Ton IA</div><div class="chips">' + AIP.map(function (x) { return '<button class="chip' + (x.id === A.prov ? ' go' : '') + '" data-act="aiprov" data-k="' + x.id + '" aria-pressed="' + (x.id === A.prov) + '">' + x.name + '</button>'; }).join('') + '</div>' +
-    '<div class="lab">Ta question</div><div class="chips">' + A.c.quick.map(function (qq, i) { return '<button class="chip" data-act="aiq" data-i="' + i + '">' + esc(qq) + '</button>'; }).join('') + '</div>' +
-    '<textarea id="ai-q" placeholder="Écris ta question, ou touche une suggestion…" aria-label="Ta question">' + esc(A.q) + '</textarea>' +
-    (prof() ? '<button class="chip" data-act="aiprof" aria-pressed="' + !!A.prof + '" style="align-self:flex-start">' + (A.prof ? '✓ ' : '') + 'Inclure mon profil (âge, poids, objectif)</button>' : '') +
-    '<button class="btn primary big" data-act="aigo">Poser la question à ' + pv.name + '</button>' +
-    '<p class="legend" style="margin:0">' + (pv.q ? 'Ton compte ' + pv.name + ' s\'ouvre avec la question prête. Si elle n\'apparaît pas, colle-la : elle est copiée.' : 'Ton compte ' + pv.name + ' s\'ouvre et la question est copiée : colle-la dans la conversation.') + ' Seul ce texte est transmis, et seulement quand tu valides chez ton IA. Pas un avis médical.</p>' +
-    '<button class="chip" data-act="aifold" aria-expanded="' + !!A.fold + '" style="align-self:flex-start">Voir le texte envoyé ' + (A.fold ? '▴' : '▾') + '</button>' + (A.fold ? '<pre>' + esc(txt) + '</pre><button class="btn" data-act="aicopy">Copier le texte</button>' : '') + '</div>';
-  if (!el) { el = document.createElement('div'); el.id = 'aisheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Assistant IA'); el.addEventListener('click', function (ev) { if (ev.target === el) hideAI(); }); document.body.appendChild(el); }
-  var sc = el.firstChild ? el.firstChild.scrollTop : 0; el.innerHTML = html; if (el.firstChild) el.firstChild.scrollTop = sc;
+  var el = document.getElementById('aisheet'), pv = aiPv(A.prov), key = aiKey(pv.id), setup = !key || A.setup, html;
+  var head = '<div class="row" style="justify-content:space-between"><div><div class="ename">Assistant IA</div><div class="legend" style="margin:0">' + esc(A.c.label) + '</div></div><button class="chip" data-act="aiclose" aria-label="Fermer">✕</button></div>' +
+    '<div class="chips">' + AIP.map(function (x) { return '<button class="chip' + (x.id === A.prov ? ' go' : '') + '" data-act="aiprov" data-k="' + x.id + '" aria-pressed="' + (x.id === A.prov) + '">' + x.name + '</button>'; }).join('') + (key ? '<button class="chip" data-act="aiset" aria-label="Réglages de la clé" aria-pressed="' + !!A.setup + '">⚙</button>' : '') + '</div>';
+  if (setup) {
+    html = '<div class="in-box" id="aibox">' + head + '<div class="card"><div class="lab">Connecter ' + pv.name + '</div><p class="why">Pour discuter ici, colle ta clé API ' + pv.name + '. ' + esc(pv.cost) + '</p>' +
+      '<div class="in-step"><i>1</i><span><a class="btn" href="' + pv.keyUrl + '" target="_blank" rel="noopener">Créer ma clé ' + pv.name + '</a></span></div>' +
+      '<div class="in-step"><i>2</i><span style="flex:1;min-width:0"><input class="fin" id="ai-key" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Colle ta clé ici" aria-label="Clé API ' + pv.name + '" style="width:100%"></span></div>' +
+      '<div class="row"><button class="btn primary" data-act="aikeysave" style="flex:1">Enregistrer</button>' + (key ? '<button class="btn" data-act="aikeydel">Supprimer la clé</button>' : '') + '</div>' +
+      '<p class="legend" style="margin:0">La clé reste sur ce téléphone : elle n\'est ni envoyée à BeYourCoach ni incluse dans tes sauvegardes. Tes questions partent directement vers ' + pv.name + '.</p>' + (A.err ? '<div class="msg err">' + esc(A.err) + '</div>' : '') + '</div>' +
+      '<button class="chip" data-act="aigo" style="align-self:flex-start">Sans clé : ouvrir ' + pv.name + ' dans mon compte</button></div>';
+  } else {
+    var msgs = AIMSG.map(function (m) { return '<div class="aibub ' + (m.r === 'u' ? 'u' : 'a') + '">' + (m.r === 'u' ? esc(m.t) : aiMd(m.t)) + '</div>'; }).join('');
+    if (A.busy) msgs += '<div class="aibub a" aria-live="polite">…</div>';
+    if (!AIMSG.length && !A.busy) msgs = '<p class="legend" style="margin:0">Pose ta question, ou touche une suggestion :</p><div class="chips">' + A.c.quick.map(function (qq, i) { return '<button class="chip" data-act="aisendq" data-i="' + i + '">' + esc(qq) + '</button>'; }).join('') + '</div>' + (prof() ? '<button class="chip" data-act="aiprof" aria-pressed="' + !!A.prof + '" style="align-self:flex-start">' + (A.prof ? '✓ ' : '') + 'Inclure mon profil (âge, poids, objectif)</button>' : '');
+    if (A.err) msgs += '<div class="msg err">' + esc(A.err) + '</div>';
+    html = '<div class="in-box chat" id="aibox">' + head + '<div id="aimsgs">' + msgs + '</div>' +
+      '<div class="row" style="align-items:flex-end"><textarea id="ai-q" rows="1" placeholder="Ta question…" aria-label="Ta question">' + esc(A.q) + '</textarea><button class="btn primary" data-act="aibtn"' + (A.busy ? ' disabled' : '') + ' aria-label="Envoyer" style="flex:none;padding:12px 16px">➤</button></div>' +
+      '<div class="row" style="justify-content:space-between"><span class="legend" style="margin:0">Peut contenir des erreurs. Pas un avis médical.</span>' + (AIMSG.length ? '<button class="chip" data-act="ainew">Nouvelle conversation</button>' : '') + '</div></div>';
+  }
+  if (!el) { el = document.createElement('div'); el.id = 'aisheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Assistant IA'); el.addEventListener('click', function (ev) { if (ev.target === el) { hideAI(); aiFab(); } }); document.body.appendChild(el); }
+  el.innerHTML = html;
+  var ms = document.getElementById('aimsgs'); if (ms) ms.scrollTop = ms.scrollHeight;
+}
+function aiSend(text) {
+  var A = S.ai; text = (text || '').trim(); if (!A || A.busy || !text) return;
+  var pv = aiPv(A.prov), key = aiKey(pv.id); if (!key) { A.setup = true; renderAI(); return; }
+  AIMSG.push({ r: 'u', t: text }); A.q = ''; A.busy = true; A.err = null; renderAI();
+  var h = AIMSG.slice(-12); while (h.length && h[0].r !== 'u') h.shift();
+  aiCall(pv, key, aiSystem(), h).then(function (t) { AIMSG.push({ r: 'a', t: t }); }, function (e) { AIMSG.pop(); A.q = text; A.err = (e && e.message && e.message.indexOf('Failed to fetch') < 0 ? e.message : 'Connexion impossible. Vérifie ton réseau et réessaie.'); }).then(function () { A.busy = false; if (S.ai === A) renderAI(); });
 }
 function hideAI() { var el = document.getElementById('aisheet'); if (el) el.remove(); S.ai = null; }
 function aiCopy(txt, cb) { try { navigator.clipboard.writeText(txt).then(function () { cb(true); }, function () { cb(false); }); } catch (e) { cb(false); } }
@@ -4053,7 +4125,7 @@ function viewSummary() {
 }
 
 /* ---------- sauvegarde complète ---------- */
-var BKSKIP = { 'cds.nav': 1, 'cds.tab': 1, 'cds.active': 1, 'cds.ai': 1, 'cds.chat': 1, 'cds.lastbackup': 1 };
+var BKSKIP = { 'cds.ai.k.claude': 1, 'cds.ai.k.chatgpt': 1, 'cds.ai.k.gemini': 1, 'cds.aiprov': 1, 'cds.nav': 1, 'cds.tab': 1, 'cds.active': 1, 'cds.ai': 1, 'cds.chat': 1, 'cds.lastbackup': 1 };
 function backupObj() {
   var d = {};
   try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('cds.') === 0 && !BKSKIP[k]) d[k] = localStorage.getItem(k); } } catch (e) {}
@@ -4252,8 +4324,13 @@ document.addEventListener('click', function (e) {
   else if (a === 'today') { var tp = todayPick((function () { var o = {}; C.MUSCLES.forEach(function (m) { o[m] = C.muscleStatus(model, m, now()); }); return o; })()); if (tp) { S.sel = tp.p[1].slice(); S.done = {}; S.xtra = []; S.xk = null; startWorkout(); window.scrollTo(0, 0); } }
   else if (a === 'ai') { showAI(); aiFab(); return; }
   else if (a === 'aiclose') { hideAI(); aiFab(); return; }
-  else if (a === 'aiprov') { S.ai.prov = k; renderAI(); return; }
-  else if (a === 'aiq') { S.ai.q = S.ai.c.quick[wi] || ''; renderAI(); return; }
+  else if (a === 'aiprov') { S.ai.prov = k; S.ai.setup = false; S.ai.err = null; lsSet('cds.aiprov', k); renderAI(); return; }
+  else if (a === 'aibtn') { var qa = document.getElementById('ai-q'); aiSend(qa ? qa.value : S.ai.q); return; }
+  else if (a === 'aisendq') { aiSend(S.ai.c.quick[wi]); return; }
+  else if (a === 'ainew') { AIMSG = []; S.ai.err = null; renderAI(); return; }
+  else if (a === 'aiset') { S.ai.setup = !S.ai.setup; S.ai.err = null; renderAI(); return; }
+  else if (a === 'aikeysave') { var ki = document.getElementById('ai-key'), kv = ki ? ki.value.trim() : ''; if (kv.length < 20 || /\s/.test(kv)) { S.ai.err = 'Cette clé ne semble pas valide : copie-la en entier.'; renderAI(); return; } lsSet('cds.ai.k.' + S.ai.prov, kv); S.ai.setup = false; S.ai.err = null; renderAI(); return; }
+  else if (a === 'aikeydel') { lsDel('cds.ai.k.' + S.ai.prov); S.ai.setup = true; renderAI(); return; }
   else if (a === 'aiprof') { S.ai.prof = !S.ai.prof; renderAI(); return; }
   else if (a === 'aifold') { S.ai.fold = !S.ai.fold; renderAI(); return; }
   else if (a === 'aicopy') { var tx = document.getElementById('ai-q'); if (tx) S.ai.q = tx.value; aiCopy(aiPrompt(), function (ok) { toast(ok ? 'Texte copié.' : 'Copie bloquée par ce navigateur.', !ok); }); return; }
