@@ -274,6 +274,14 @@ ul.how { margin: 0; padding-left: 20px; display: flex; flex-direction: column; g
 .lg { border: 1px solid var(--line); border-radius: 10px; background: var(--surface); padding: 10px 12px; margin: 0 0 8px; }
 .lg summary { cursor: pointer; font-weight: 600; }
 .lg .why { margin: 8px 0 0; }
+#instsheet { position: fixed; inset: 0; z-index: 40; background: rgba(0,0,0,.6); display: flex; align-items: flex-end; justify-content: center; }
+#instsheet .in-box { width: 100%; max-width: 560px; background: var(--surface); border: 1.5px solid var(--line); border-radius: 18px 18px 0 0; padding: 18px max(16px, env(safe-area-inset-right, 0px)) calc(20px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); display: flex; flex-direction: column; gap: 12px; max-height: 92vh; overflow: auto; }
+.in-step { display: flex; gap: 12px; align-items: center; }
+.in-step i { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font: 700 14px/28px var(--f-mono); text-align: center; font-style: normal; }
+.in-step svg { width: 22px; height: 22px; vertical-align: -5px; stroke: var(--accent); fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.in-arrow { text-align: center; font-size: 34px; line-height: 1; color: var(--accent); animation: inbob 1.1s ease-in-out infinite; }
+@keyframes inbob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { .in-arrow { animation: none; } }
 #legal { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; padding: 12px max(16px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); background: var(--surface); border-top: 1px solid var(--accent); font-size: 13.5px; }
 #legal p { margin: 0 0 8px; max-width: 60ch; }
 .msg.tip { background: var(--accent-soft); border-color: var(--accent); }
@@ -3540,13 +3548,14 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.67';
+var APP_VER = 'v0.68';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
     '<h1>Bienvenue dans <span class="gtext">BeYourCoach</span></h1>' +
     '<p class="tag">Chaque séance compte. BeYourCoach s\'en souvient pour te faire progresser.</p>' +
     '<p class="legend" style="margin-top:-6px">' + APP_VER + ' · bêta · <a href="#" data-act="upd">Vérifier les mises à jour</a></p><div class="chips" style="justify-content:center;align-items:center"><span class="legend" style="margin:0">Apparence</span>' + [['dark', 'Sombre'], ['light', 'Clair'], ['auto', 'Auto']].map(function (o) { return '<button class="chip" data-act="theme" data-v="' + o[0] + '" aria-pressed="' + ((lsGet('cds.theme') || 'dark') === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div>' +
+    installCard(false) +
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
     '<div class="acts">' +
     (d ? '<button class="btn primary big" data-act="enter">Continuer avec mon historique</button><p class="sub">' + model.sessions.length + ' séances · dernière ' + C.rel(model.last, now()) + '</p>' : '') +
@@ -3570,11 +3579,33 @@ function viewData() {
   var exN = Object.keys(model.ex).length;
   return profileCard() + '<section class="sec"><div><h2>Données</h2><p class="sub">' + model.sessions.length + ' séances, ' + exN + ' exercices, du ' + first + ' au ' + last + '.</p></div>' +
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
-    '<div class="card">' + themeRow() + '</div>' + '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
+    '<div class="card">' + themeRow() + '</div>' + installCard(true) + '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
     (seedCSV.trim() ? '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : effacer aussi mes nouvelles séances' : 'Revenir aux données d\'origine') + '</button></div>' : '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : tout effacer' : 'Effacer mes données') + '</button></div>') + '</div></section>' +
     '<section class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier workout_data.csv ci-dessus.</li></ol></section>' + backupCard() + exportCard() + legalCard();
 }
 
+/* ---------- installation sur l'écran d'accueil ---------- */
+var INST = { ev: null };
+function isStandalone() { try { return !!(navigator.standalone || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches)); } catch (e) { return false; } }
+function isIOS() { var u = navigator.userAgent || ''; return /iPhone|iPad|iPod/.test(u) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); }
+window.addEventListener('beforeinstallprompt', function (e) { e.preventDefault(); INST.ev = e; });
+window.addEventListener('appinstalled', function () { lsSet('cds.inst', '1'); INST.ev = null; hideInst(); toast('BeYourCoach est installée.'); try { render(); } catch (e) {} });
+function installCard(force) {
+  if (isStandalone() || (!force && lsGet('cds.inst') === '1')) return '';
+  return '<div class="card" style="border-color:var(--accent)"><div class="lab">Sur ton écran d\'accueil</div><p class="why">Installe BeYourCoach comme une vraie app : une icône sur ton téléphone, l\'écran en plein format, et elle marche sans réseau.</p><div class="row"><button class="btn primary" data-act="inst">' + (isIOS() ? 'Comment installer' : 'Installer l\'app') + '</button>' + (force ? '' : '<button class="chip" data-act="instno">Plus tard</button>') + '</div></div>';
+}
+var SHARE_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V3M8 7l4-4 4 4M6 11H5a1 1 0 00-1 1v8a1 1 0 001 1h14a1 1 0 001-1v-8a1 1 0 00-1-1h-1"/></svg>';
+function showInst() {
+  var el = document.getElementById('instsheet'); if (el) el.remove();
+  var ios = isIOS(), phone = /iPhone|iPod/.test(navigator.userAgent || ''), st;
+  if (ios) st = '<div class="in-step"><i>1</i><span>Touche <b>Partager</b> ' + SHARE_SVG + ' ' + (phone ? 'en bas' : 'en haut') + ' de Safari.</span></div><div class="in-step"><i>2</i><span>Fais défiler, puis touche <b>Sur l\'écran d\'accueil</b>.</span></div><div class="in-step"><i>3</i><span>Touche <b>Ajouter</b>. L\'icône apparaît sur ton écran.</span></div>';
+  else st = '<div class="in-step"><i>1</i><span>Ouvre le <b>menu ⋮</b> de ton navigateur.</span></div><div class="in-step"><i>2</i><span>Touche <b>Installer l\'application</b> (ou « Ajouter à l\'écran d\'accueil »).</span></div><div class="in-step"><i>3</i><span>Confirme. L\'icône apparaît sur ton écran.</span></div>';
+  el = document.createElement('div'); el.id = 'instsheet'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-label', 'Installer BeYourCoach');
+  el.innerHTML = '<div class="in-box"><div class="ename">Installer BeYourCoach</div>' + st + '<p class="legend">' + (ios ? 'Sur iPhone, utilise Safari : c\'est lui qui propose l\'ajout.<br>' : '') + 'L\'app installée a son propre espace : si tu as déjà des séances dans le navigateur, exporte-les dans Données, puis importe-les dans l\'app installée.</p>' + (ios && phone ? '<div class="in-arrow" aria-hidden="true">▼</div>' : '') + '<button class="btn primary big" data-act="instclose">J\'ai compris</button></div>';
+  el.addEventListener('click', function (ev) { if (ev.target === el) hideInst(); });
+  document.body.appendChild(el);
+}
+function hideInst() { var el = document.getElementById('instsheet'); if (el) el.remove(); }
 function legalBar() {
   var el = document.getElementById('legal');
   var done = lsGet('cds.legal') === '1';
@@ -4126,6 +4157,9 @@ document.addEventListener('click', function (e) {
   }
   else if (a === 'rbstart') { var r1 = findRout(k); if (r1) { startRoutine(r1); if (S.active) { window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 0); } } }
   else if (a === 'rbdelete') { if (S.confirm !== 'rd' + k) S.confirm = 'rd' + k; else { ROUT = ROUT.filter(function (z) { return z.id !== k; }); saveRout(); S.confirm = null; } }
+  else if (a === 'inst') { if (INST.ev) { var iv = INST.ev; INST.ev = null; try { iv.prompt(); iv.userChoice.then(function (c) { if (c && c.outcome === 'accepted') lsSet('cds.inst', '1'); render(); }, function () {}); } catch (er) { showInst(); } } else showInst(); return; }
+  else if (a === 'instno') { lsSet('cds.inst', '1'); }
+  else if (a === 'instclose') { hideInst(); return; }
   else if (a === 'legalok') { lsSet('cds.legal', '1'); legalBar(); return; }
   else if (a === 'enter') { S.msg = null; if (!PROFILE && !S.skipped) { S.onb = { next: 'enter' }; S.pf = newPf(); S.pfErr = null; render(); return; } S.home = false; go(S.tab === 'data' ? 'seance' : S.tab); return; }
   else if (a === 'blank') { if (!PROFILE && !S.skipped) { S.onb = { next: 'blank' }; S.pf = newPf(); S.pfErr = null; render(); return; } startBlank(); return; }
