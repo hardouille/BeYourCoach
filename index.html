@@ -257,12 +257,19 @@ select.search { appearance: auto; }
 .ph img.b { opacity: 0; animation: phflip 3.2s ease-in-out infinite; }
 @keyframes phflip { 0%, 12% { opacity: 0; } 42%, 58% { opacity: 1; } 88%, 100% { opacity: 0; } }
 .figbox.paused .ph img.b { animation-play-state: paused; }
-.figbox.hasph svg.fig { display: none; }
+.figbox.hasph svg.fig { margin-top: 8px; }
 @media (prefers-reduced-motion: reduce) { .ph img.b { animation: none; opacity: 0; } }
 .pp { position: absolute; right: 8px; bottom: 8px; padding: 4px 10px; font-size: 12px; }
-.fig .fg { fill: none; stroke: var(--ink); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
-.fig .fg.back { opacity: .4; } .fig .fg.hd { stroke-width: 3.5; }
-.fig .hl { fill: none; stroke: var(--accent); stroke-width: 5; stroke-linecap: round; stroke-linejoin: round; }
+.fig { --hdl: color-mix(in srgb, var(--ink) 38%, #fff); --hdd: color-mix(in srgb, var(--ink) 66%, var(--bg)); }
+.fig line { stroke-linecap: round; }
+.fig .vo { stroke: #000; stroke-opacity: .28; }
+.fig .vb.fg { stroke: color-mix(in srgb, var(--ink) 66%, var(--bg)); } .fig .vb.hl { stroke: var(--accent); }
+.fig .vb { fill: none; stroke-linecap: round; }
+.fig circle.vb.fg { fill: color-mix(in srgb, var(--ink) 66%, var(--bg)); stroke: none; } .fig circle.vb.hl { fill: var(--accent); stroke: none; }
+.fig .vh { stroke: #fff; stroke-opacity: .5; } .fig .vs { stroke: #000; stroke-opacity: .26; }
+.fig .hdv { stroke: #000; stroke-opacity: .0; }
+.fig .gsh { fill: #000; opacity: .22; }
+.fig .dbv { fill: var(--muted); stroke: #000; stroke-opacity: .3; stroke-width: .8; } .fig .dbh { fill: #fff; opacity: .5; }
 .fig .eq { stroke: var(--muted); stroke-width: 3; stroke-linecap: round; } .fig .eq.bar { fill: var(--surface); }
 .fig .fl { stroke: var(--line); stroke-width: 1; } .fig .cb { stroke: var(--muted); stroke-width: 1; } .fig .dotc { fill: var(--muted); }
 ul.how { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: 14px; }
@@ -1242,37 +1249,50 @@ function lerpPose(A, B, u) {
   for (k in B) if (!(k in P)) P[k] = B[k];
   return P;
 }
-function pl(pts, cls) {
-  return '<polyline class="' + cls + '" points="' + pts.map(function (p) { return p[0].toFixed(1) + ',' + p[1].toFixed(1); }).join(' ') + '"/>';
+function f1(n) { return n.toFixed(1); }
+/* Membre en volume : contour sombre, couleur de base, reflet décalé vers la lumière (haut gauche). ws = épaisseur par segment. */
+function limb(pts, cls, ws, back) {
+  var i, o = '', b = '', hi = '', seg = function (k, w) { return 'x1="' + f1(pts[k][0]) + '" y1="' + f1(pts[k][1]) + '" x2="' + f1(pts[k + 1][0]) + '" y2="' + f1(pts[k + 1][1]) + '"'; };
+  for (i = 0; i < pts.length - 1; i++) {
+    var w = ws[Math.min(i, ws.length - 1)];
+    o += '<line class="vo" ' + seg(i) + ' style="stroke-width:' + f1(w + 1.6) + '"/>';
+    b += '<line class="vb ' + cls + '" ' + seg(i) + ' style="stroke-width:' + f1(w) + '"/>';
+    hi += '<line class="vs" ' + seg(i) + ' style="stroke-width:' + f1(w * .42) + '" transform="translate(' + f1(w * .24) + ',' + f1(w * .24) + ')"/>';
+    hi += '<line class="vh" ' + seg(i) + ' style="stroke-width:' + f1(w * .32) + '" transform="translate(' + f1(-w * .2) + ',' + f1(-w * .2) + ')"/>';
+  }
+  return '<g' + (back ? ' opacity=".42"' : '') + '>' + o + b + hi + '</g>';
 }
+function ball(p, r, cls) { return '<circle class="vb ' + cls + '" cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="' + r + '"/>'; }
 function draw(S, P, im, cab) {
   var j = joints(S, P), hl = S.hl || 'arms', s = '', front = S.v === 'front';
-  if (!S.nf) s += '<line class="fl" x1="14" y1="127" x2="186" y2="127"/>';
+  s += '<defs><radialGradient id="hdg" cx="35%" cy="30%" r="75%"><stop offset="0" style="stop-color:var(--hdl)"/><stop offset="1" style="stop-color:var(--hdd)"/></radialGradient></defs>';
+  if (!S.nf) s += '<ellipse class="gsh" cx="' + f1(j.hip[0] + 4) + '" cy="128" rx="34" ry="3.4"/><line class="fl" x1="14" y1="127" x2="186" y2="127"/>';
   (S.sup || []).forEach(function (e) {
     if (e[0] === 'l') s += '<line class="eq" x1="' + e[1] + '" y1="' + e[2] + '" x2="' + e[3] + '" y2="' + e[4] + '"' + (e[5] ? ' style="stroke-width:' + e[5] + '"' : '') + '/>';
     else if (e[0] === 'c') s += '<circle class="eq" cx="' + e[1] + '" cy="' + e[2] + '" r="' + e[3] + '" fill="none"/>';
   });
   var legC = hl === 'legs' || hl === 'both' ? 'hl' : 'fg', armC = hl === 'arms' || hl === 'both' ? 'hl' : 'fg';
+  var WL = [9.5, 7], WA = [7, 5.4], WT = [14, 11];
   if (front) {
-    s += pl([j.hipL, j.knL, j.anL], legC) + pl([j.hipR, j.knR, j.anR], legC);
-    s += pl([j.hip, j.sh], 'fg') + pl([j.shL, j.shR], 'fg');
-    s += pl([j.shL, j.elL, j.haL], armC) + pl([j.shR, j.elR, j.haR], armC);
+    s += limb([j.hipL, j.knL, j.anL], legC, WL) + limb([j.hipR, j.knR, j.anR], legC, WL);
+    s += limb([j.hip, j.sh], 'fg', WT) + limb([j.shL, j.shR], 'fg', [8]);
+    s += limb([j.shL, j.elL, j.haL], armC, WA) + limb([j.shR, j.elR, j.haR], armC, WA);
   } else {
-    if (j.kn2) s += pl([j.hip, j.kn2, j.an2, j.to2], 'fg back');
-    s += pl([j.hip, j.kn, j.an, j.to], legC);
-    s += pl([j.hip, j.sh], hl === 'core' ? 'hl' : 'fg');
-    if (!S.na) s += pl([j.sh, j.el, j.ha], armC);
-    if (j.hn) s += pl([j.ha, j.hn], armC);
+    if (j.kn2) s += limb([j.hip, j.kn2, j.an2, j.to2], 'fg', [9.5, 7, 4], true);
+    s += limb([j.hip, j.kn, j.an, j.to], legC, [9.5, 7, 4]);
+    s += limb([j.hip, j.sh], hl === 'core' ? 'hl' : 'fg', WT);
+    if (!S.na) s += limb([j.sh, j.el, j.ha], armC, WA) + ball(j.sh, 4.2, armC);
+    if (j.hn) s += limb([j.ha, j.hn], armC, [4]);
   }
-  s += '<circle class="fg hd" cx="' + j.head[0].toFixed(1) + '" cy="' + j.head[1].toFixed(1) + '" r="7"/>';
+  s += '<circle class="hdv" cx="' + f1(j.head[0]) + '" cy="' + f1(j.head[1]) + '" r="7.6" fill="url(#hdg)"/>';
   var at = S.ia || 'ha', pts = S.na ? [] : front ? [j.haR, j.haL] : [j[at] || j.ha];
   pts.forEach(function (p) {
-    if (cab && im === 'cable' && !front) s += '<line class="cb" x1="' + cab[0] + '" y1="' + cab[1] + '" x2="' + p[0].toFixed(1) + '" y2="' + p[1].toFixed(1) + '"/>';
-    if (im === 'bar') s += '<circle class="eq bar" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="8"/><circle class="dotc" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="2"/>';
-    else if (im === 'db') s += '<circle class="dotc" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="5.5"/>';
-    else if (im === 'cable' || im === 'mach') s += '<circle class="eq" cx="' + p[0].toFixed(1) + '" cy="' + p[1].toFixed(1) + '" r="3.5" fill="none"/>';
+    if (cab && im === 'cable' && !front) s += '<line class="cb" x1="' + cab[0] + '" y1="' + cab[1] + '" x2="' + f1(p[0]) + '" y2="' + f1(p[1]) + '"/>';
+    if (im === 'bar') s += '<circle class="eq bar" cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="8"/><circle class="dotc" cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="2"/>';
+    else if (im === 'db') s += '<circle class="dbv" cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="5.8"/><circle class="dbh" cx="' + f1(p[0] - 1.6) + '" cy="' + f1(p[1] - 1.8) + '" r="1.7"/>';
+    else if (im === 'cable' || im === 'mach') s += '<circle class="eq" cx="' + f1(p[0]) + '" cy="' + f1(p[1]) + '" r="3.5" fill="none"/>';
   });
-  if (S.pad) { var pp = j[S.pad]; s += '<circle class="dotc" cx="' + pp[0].toFixed(1) + '" cy="' + pp[1].toFixed(1) + '" r="4.5"/>'; }
+  if (S.pad) { var pp = j[S.pad]; s += '<circle class="dotc" cx="' + f1(pp[0]) + '" cy="' + f1(pp[1]) + '" r="4.5"/>'; }
   return s;
 }
 
@@ -3491,7 +3511,7 @@ function ficheHTML(name) {
   var phHTML = ph ? '<div class="ph"><img src="img/' + ph + '-0.jpg" alt="" class="phi a" loading="lazy"><img src="img/' + ph + '-1.jpg" alt="Position de fin de mouvement" class="phi b" loading="lazy"></div>' : '';
   var media = vitalHTML(name) || sketchHTML(name) || videoHTML(name);
   return '<div class="fiche">' + media + (media ? '' : '<div class="figbox' + (ph ? ' hasph' : '') + (Anim.isPlaying() ? '' : ' paused') + '">' + phHTML + Anim.svgFor(e.p, e.im) + '<button class="btn pp" data-act="anim">' + (Anim.isPlaying() ? 'Pause' : 'Lecture') + '</button></div>' +
-    '<p class="legend">' + (ph ? 'Photos : début puis fin du mouvement (free-exercise-db, domaine public). Le geste exact peut varier selon la machine.' : (front ? 'Vue de face.' : 'Vue de profil.') + ' La couleur montre ce qui travaille. Dessin schématique.') + '</p>') +
+    '<p class="legend">' + (ph ? 'Photos : début puis fin du mouvement (free-exercise-db, domaine public), puis le même geste en volume (la couleur montre ce qui travaille). Le geste exact peut varier selon la machine.' : (front ? 'Vue de face.' : 'Vue de profil.') + ' La couleur montre ce qui travaille. Dessin schématique.') + '</p>') +
     '<div class="lab">Muscles</div><p class="why"><b>' + e.m + '</b>' + (e.sec ? ' · secondaires : ' + esc(e.sec) : '') + '</p>' +
     '<div class="lab">Matériel</div><p class="why">' + esc(e.eq) + '</p>' +
     '<div class="lab">Exécution</div><ol class="how">' + e.st.map(li).join('') + '</ol>' +
@@ -3552,7 +3572,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.74';
+var APP_VER = 'v0.75';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
