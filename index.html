@@ -3565,7 +3565,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.71';
+var APP_VER = 'v0.72';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3676,33 +3676,54 @@ function aiSystem() {
   return 'Tu es le coach intégré à l\'application de musculation BeYourCoach. Réponds en français, de façon claire, concrète et courte (moins de 200 mots sauf si on te demande plus). Tu donnes des conseils prudents et tu ne fais pas d\'avis médical : en cas de douleur ou de doute de santé, conseille de voir un professionnel. Format simple : phrases courtes, listes à puces si utile, pas de tableau.' +
     (A.prof && aiProfile() ? '\n\n' + aiProfile() : '') + (c.text ? '\n\nContexte (données de l\'app) :\n' + c.text : '');
 }
+var GEM_MODELS = ['gemini-flash-latest', 'gemini-3.6-flash', 'gemini-2.5-flash'];
+function aiFetch(url, H, body) {
+  var ctl = window.AbortController ? new AbortController() : null, tm = setTimeout(function () { if (ctl) ctl.abort(); }, 60000);
+  return fetch(url, { method: 'POST', headers: H, body: JSON.stringify(body), signal: ctl ? ctl.signal : undefined }).then(function (res) {
+    return res.text().then(function (tx) { clearTimeout(tm); var j = {}; try { j = JSON.parse(tx); } catch (e) {} return { res: res, j: j, raw: tx }; });
+  }, function (e) { clearTimeout(tm); throw new Error(e && e.name === 'AbortError' ? 'Délai dépassé (60 s) : l\'IA n\'a pas répondu. Réessaie.' : 'Connexion impossible : vérifie ton réseau (' + (e && e.message ? e.message : 'erreur') + ').'); });
+}
 function aiCall(pv, key, system, msgs) {
   var H = { 'content-type': 'application/json' }, url, body;
   var role = function (m) { return m.r === 'u' ? 'user' : 'assistant'; };
+  var fail = function (o, model) {
+    var j = o.j, m = j && j.error && (j.error.message || j.error), st = o.res.status;
+    return new Error(st === 401 || st === 403 || /api.?key.*(invalid|not valid)|invalid.*api.?key/i.test(String(m)) ? 'Clé refusée par ' + pv.name + ' (' + st + '). Vérifie-la dans les réglages ⚙.' : st === 429 ? 'Quota ou limite atteinte chez ' + pv.name + ' (429). Réessaie plus tard.' : 'Erreur ' + pv.name + ' ' + st + (model ? ' (' + model + ')' : '') + (m ? ' : ' + String(m).slice(0, 180) : o.raw ? ' : ' + o.raw.slice(0, 120) : '') + '.');
+  };
   if (pv.id === 'claude') {
-    url = 'https://api.anthropic.com/v1/messages'; H['x-api-key'] = key; H['anthropic-version'] = '2023-06-01'; H['anthropic-dangerous-direct-browser-access'] = 'true';
+    H['x-api-key'] = key; H['anthropic-version'] = '2023-06-01'; H['anthropic-dangerous-direct-browser-access'] = 'true';
     body = { model: pv.model, max_tokens: 900, system: system, messages: msgs.map(function (m) { return { role: role(m), content: m.t }; }) };
-  } else if (pv.id === 'chatgpt') {
-    url = 'https://api.openai.com/v1/chat/completions'; H.authorization = 'Bearer ' + key;
-    body = { model: pv.model, max_tokens: 900, messages: [{ role: 'system', content: system }].concat(msgs.map(function (m) { return { role: role(m), content: m.t }; })) };
-  } else {
-    url = 'https://generativelanguage.googleapis.com/v1beta/models/' + pv.model + ':generateContent'; H['x-goog-api-key'] = key;
-    body = { system_instruction: { parts: [{ text: system }] }, contents: msgs.map(function (m) { return { role: m.r === 'u' ? 'user' : 'model', parts: [{ text: m.t }] }; }), generationConfig: { maxOutputTokens: 2000 } };
+    return aiFetch('https://api.anthropic.com/v1/messages', H, body).then(function (o) {
+      if (!o.res.ok) throw fail(o, pv.model);
+      var t = (o.j.content || []).map(function (x) { return x.text || ''; }).join('');
+      if (!t) throw new Error('Réponse vide de Claude. Réessaie.'); return t;
+    });
   }
-  return fetch(url, { method: 'POST', headers: H, body: JSON.stringify(body) }).then(function (res) {
-    return res.json().catch(function () { return {}; }).then(function (j) {
-      if (!res.ok) {
-        var m = j && j.error && (j.error.message || j.error), st = res.status;
-        throw new Error(st === 401 || st === 403 || /api.?key/i.test(String(m)) ? 'Clé refusée par ' + pv.name + '. Vérifie-la dans les réglages ⚙.' : st === 429 ? 'Quota ou limite atteinte chez ' + pv.name + '. Réessaie plus tard.' : 'Erreur ' + pv.name + (m ? ' : ' + String(m).slice(0, 140) : ' (' + st + ')') + '.');
+  if (pv.id === 'chatgpt') {
+    H.authorization = 'Bearer ' + key;
+    body = { model: pv.model, max_tokens: 900, messages: [{ role: 'system', content: system }].concat(msgs.map(function (m) { return { role: role(m), content: m.t }; })) };
+    return aiFetch('https://api.openai.com/v1/chat/completions', H, body).then(function (o) {
+      if (!o.res.ok) throw fail(o, pv.model);
+      var t = (((o.j.choices || [])[0] || {}).message || {}).content || '';
+      if (!t) throw new Error('Réponse vide de ChatGPT. Réessaie.'); return t;
+    });
+  }
+  H['x-goog-api-key'] = key;
+  body = { system_instruction: { parts: [{ text: system }] }, contents: msgs.map(function (m) { return { role: m.r === 'u' ? 'user' : 'model', parts: [{ text: m.t }] }; }), generationConfig: { maxOutputTokens: 4096 } };
+  var tryM = function (i) {
+    var model = GEM_MODELS[i];
+    return aiFetch('https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent', H, body).then(function (o) {
+      if (!o.res.ok) {
+        var m = o.j && o.j.error && o.j.error.message, st = o.res.status;
+        if (i < GEM_MODELS.length - 1 && (st === 404 || (st === 400 && /model|not found|not supported|deprecated/i.test(String(m))))) return tryM(i + 1);
+        throw fail(o, model);
       }
-      var t = '';
-      if (pv.id === 'claude') t = (j.content || []).map(function (x) { return x.text || ''; }).join('');
-      else if (pv.id === 'chatgpt') t = (((j.choices || [])[0] || {}).message || {}).content || '';
-      else t = ((((j.candidates || [])[0] || {}).content || {}).parts || []).map(function (x) { return x.text || ''; }).join('');
-      if (!t) throw new Error('Réponse vide de ' + pv.name + '. Réessaie.');
+      var c = (o.j.candidates || [])[0] || {}, t = (((c.content || {}).parts) || []).map(function (x) { return x.text || ''; }).join('');
+      if (!t) { var why = (o.j.promptFeedback && o.j.promptFeedback.blockReason) || c.finishReason || ''; throw new Error('Gemini n\'a rien renvoyé' + (why ? ' (raison : ' + why + ')' : '') + ' avec ' + model + '. Réessaie, ou reformule.'); }
       return t;
     });
-  });
+  };
+  return tryM(0);
 }
 function aiMd(t) {
   var out = [], list = null, ord = false;
@@ -3729,7 +3750,7 @@ function renderAI() {
       '<button class="chip" data-act="aigo" style="align-self:flex-start">Sans clé : ouvrir ' + pv.name + ' dans mon compte</button></div>';
   } else {
     var msgs = AIMSG.map(function (m) { return '<div class="aibub ' + (m.r === 'u' ? 'u' : 'a') + '">' + (m.r === 'u' ? esc(m.t) : aiMd(m.t)) + '</div>'; }).join('');
-    if (A.busy) msgs += '<div class="aibub a" aria-live="polite">…</div>';
+    if (A.busy) msgs += '<div class="aibub a" aria-live="polite">' + pv.name + ' réfléchit… (jusqu\'à 30 s)</div>';
     if (!AIMSG.length && !A.busy) msgs = '<p class="legend" style="margin:0">Pose ta question, ou touche une suggestion :</p><div class="chips">' + A.c.quick.map(function (qq, i) { return '<button class="chip" data-act="aisendq" data-i="' + i + '">' + esc(qq) + '</button>'; }).join('') + '</div>' + (prof() ? '<button class="chip" data-act="aiprof" aria-pressed="' + !!A.prof + '" style="align-self:flex-start">' + (A.prof ? '✓ ' : '') + 'Inclure mon profil (âge, poids, objectif)</button>' : '');
     if (A.err) msgs += '<div class="msg err">' + esc(A.err) + '</div>';
     html = '<div class="in-box chat" id="aibox">' + head + '<div id="aimsgs">' + msgs + '</div>' +
@@ -3745,7 +3766,7 @@ function aiSend(text) {
   var pv = aiPv(A.prov), key = aiKey(pv.id); if (!key) { A.setup = true; renderAI(); return; }
   AIMSG.push({ r: 'u', t: text }); A.q = ''; A.busy = true; A.err = null; renderAI();
   var h = AIMSG.slice(-12); while (h.length && h[0].r !== 'u') h.shift();
-  aiCall(pv, key, aiSystem(), h).then(function (t) { AIMSG.push({ r: 'a', t: t }); }, function (e) { AIMSG.pop(); A.q = text; A.err = (e && e.message && e.message.indexOf('Failed to fetch') < 0 ? e.message : 'Connexion impossible. Vérifie ton réseau et réessaie.'); }).then(function () { A.busy = false; if (S.ai === A) renderAI(); });
+  aiCall(pv, key, aiSystem(), h).then(function (t) { AIMSG.push({ r: 'a', t: t }); }, function (e) { AIMSG.pop(); A.q = text; A.err = (e && e.message) || 'Erreur inconnue.'; }).then(function () { A.busy = false; if (S.ai === A) renderAI(); });
 }
 function hideAI() { var el = document.getElementById('aisheet'); if (el) el.remove(); S.ai = null; }
 function aiCopy(txt, cb) { try { navigator.clipboard.writeText(txt).then(function () { cb(true); }, function () { cb(false); }); } catch (e) { cb(false); } }
