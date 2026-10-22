@@ -3588,7 +3588,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.77';
+var APP_VER = 'v0.78';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -4410,9 +4410,15 @@ document.addEventListener('touchstart', function (e) {
 document.addEventListener('mousedown', function (e) { if (e.button === 0 && !('ontouchstart' in window)) holdStart(e, e.clientX, e.clientY); });
 document.addEventListener('mousemove', function (e) { if (HOLDING || DRAG) holdMove(e, e.clientX, e.clientY); });
 document.addEventListener('mouseup', function () { if (HOLDING || DRAG) holdEnd(); });
+document.addEventListener('mouseup', function (e) { var t = e.target; if (t && t.classList && t.classList.contains('in') && t.id && /^[wr]-\d+-\d+$/.test(t.id) && document.activeElement === t && t.selectionStart === t.selectionEnd) { try { t.select(); } catch (er) {} } }, true);
 document.addEventListener('contextmenu', function (e) { if (e.target.closest && e.target.closest('[data-hold],.rrow')) e.preventDefault(); });
 document.addEventListener('click', function (e) { if (Date.now() - SUPCLICK < 500) { e.stopPropagation(); e.preventDefault(); } }, true);
 document.addEventListener('focusin', function (e) {
+  var t = e.target;
+  if (t.classList && t.classList.contains('in') && t.id && /^[wr]-\d+-\d+$/.test(t.id)) {
+    var sel = function () { try { t.select(); t.setSelectionRange(0, String(t.value).length); } catch (er) {} };
+    sel(); setTimeout(sel, 0); setTimeout(sel, 60);
+  }
   if (!(e.target.classList && e.target.classList.contains('pk-in'))) return;
   document.body.classList.add('pk-open'); pkFill(e.target);
   var bx = e.target.parentNode; setTimeout(function () { try { bx.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch (er) {} }, 120);
