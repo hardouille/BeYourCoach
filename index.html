@@ -2865,7 +2865,7 @@ function historySection() {
       return '<div class="hrow"><div class="ename" style="font-size:14px">' + esc(nm) + (rec ? ' <span class="pill up">Record</span>' : '') + '</div><div class="hist">' + esc(hh ? C.setLine(hh.sets) : '') + '</div></div>';
     }).join('');
     if (S.he && S.he.id === se.id) return row + heditHTML(se);
-    var own = logIdx(se) >= 0, acts = own ? '<div class="row"><button class="btn" data-act="hedit" data-k="' + esc(se.id) + '">Modifier</button><button class="btn' + (S.confirm === 'hdel' ? ' primary' : '') + '" data-act="hdel" data-k="' + esc(se.id) + '">' + (S.confirm === 'hdel' ? 'Confirmer la suppression' : 'Supprimer') + '</button></div>' : '';
+    var own = logIdx(se) >= 0, acts = own ? '<div class="row"><button class="btn" data-act="hedit" data-k="' + esc(se.id) + '">Modifier</button>' + (S.active ? '' : '<button class="btn" data-act="hresume" data-k="' + esc(se.id) + '">Reprendre</button>') + '<button class="btn' + (S.confirm === 'hdel' ? ' primary' : '') + '" data-act="hdel" data-k="' + esc(se.id) + '">' + (S.confirm === 'hdel' ? 'Confirmer la suppression' : 'Supprimer') + '</button></div>' : '';
     return row + '<div class="detail">' + det + acts + '</div>';
   }).join('') + '</div>';
   if (all.length > S.hn) h += '<button class="btn" data-act="hmore">Voir plus (' + (all.length - S.hn) + ' restantes)</button>';
@@ -3588,7 +3588,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.78';
+var APP_VER = 'v0.79';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3979,6 +3979,18 @@ function viewWorkout() {
     (S.fmsg ? '<div class="msg err">' + esc(S.fmsg) + '</div>' : '') +
     '<div style="height:' + (S.active.lastOk ? 150 : 84) + 'px"></div><div id="endbar" style="position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:6;display:flex;gap:8px;padding:8px;border-radius:14px;background:var(--surface);border:1.5px solid var(--line);box-shadow:0 8px 28px rgba(0,0,0,.35)"><button class="btn' + (S.confirm === 'abort' ? ' primary' : '') + '" data-act="wabort" style="flex:0 0 auto">' + (S.confirm === 'abort' ? 'Confirmer l\'abandon' : 'Abandonner') + '</button><button class="btn primary" data-act="wfin" style="flex:1;min-width:0">Terminer l\'entraînement</button></div>' + restBarHTML();
 }
+function resumeEntry(idx) {
+  var en = log[idx];
+  if (!en) return;
+  if (S.active) { S.msg = { err: true, t: 'Une séance est déjà en cours : termine-la ou abandonne-la avant d\'en reprendre une autre.' }; return; }
+  var dur = Math.max(0, (en.end || 0) - (en.start || 0));
+  S.active = { t0: Date.now() - dur, start: en.start, title: en.title, lastOk: null, restS: 90, resumeId: en.id, exos: en.exos.map(function (e) {
+    var le = LIBMAP[e.name], X = model.ex[e.name];
+    return { name: e.name, bw: le ? le.bw : !!(X && X.bw), last: '', hint: '', restS: le && le.k === 'C' ? 120 : 75, sets: e.sets.map(function (s) { return { w: s.w, r: s.r, ok: true }; }) };
+  }) };
+  S.summary = null; S.hs = null; S.he = null; S.rep = null; S.wf = null; S.wmsg = null; S.fmsg = null; S.confirm = null; S.msg = null;
+  saveActive(); wake(); S.tab = 'seance'; lsSet('cds.tab', 'seance'); window.scrollTo(0, 0);
+}
 function finishWorkout() {
   var a = S.active, exos = [];
   a.exos.forEach(function (e) {
@@ -3986,6 +3998,7 @@ function finishWorkout() {
     if (ss.length) exos.push({ name: e.name, sets: ss });
   });
   if (!exos.length) { S.fmsg = 'Valide au moins une série avec ✓ avant de terminer.'; return; }
+  if (a.resumeId) { var ri0 = -1; log.forEach(function (z, zi) { if (z.id === a.resumeId) ri0 = zi; }); if (ri0 >= 0) { log.splice(ri0, 1); rebuild(); } }
   var before = {};
   Object.keys(model.ex).forEach(function (k) { before[k] = model.ex[k].hist.reduce(function (m, x) { return Math.max(m, x.score); }, 0); });
   var entry = { id: String(a.t0), start: a.start, end: now(), title: a.title, exos: exos };
@@ -3999,7 +4012,7 @@ function finishWorkout() {
     var lastH = X.hist[X.hist.length - 1];
     if (before[e.name] > 0 && lastH.score > before[e.name] + 1e-9) prs.push(e.name);
   });
-  S.summary = { dur: Date.now() - a.t0, sets: sets, vol: Math.round(vol), prs: prs, saved: saved, title: a.title, auto: lsGet('cds.autobk') === '1', exos: exos };
+  S.summary = { entryId: entry.id, dur: Date.now() - a.t0, sets: sets, vol: Math.round(vol), prs: prs, saved: saved, title: a.title, auto: lsGet('cds.autobk') === '1', exos: exos };
   if (saved) snapSave('seance');
   S.active = null; S.wmsg = null; S.fmsg = null; S.confirm = null; saveActive(); unwake();
 }
@@ -4019,7 +4032,7 @@ function viewSummary() {
     (s.prs.length ? '<div class="card"><div class="lab">Nouveaux records e1RM</div>' + s.prs.map(function (n) { return '<div class="ename" style="font-size:14.5px">' + esc(n) + '</div>'; }).join('') + '</div>' : '') +
     '<div class="msg' + (s.saved ? '' : ' err') + '">' + (s.saved ? 'Séance ajoutée à ton historique. Tes courbes et tes prochaines charges en tiennent compte.' : 'Séance prise en compte, mais ce navigateur n\'a pas pu la garder. Exporte le CSV maintenant.') + '</div>' +
     (s.saved ? '<div class="legend">Une copie de sécurité a été gardée automatiquement sur cet appareil.' + (s.auto ? '' : ' Pour aussi recevoir un fichier à chaque séance, active-le dans Données.') + '</div>' : '') +
-    '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="bk">Sauvegarder mes données</button><button class="btn" data-act="tab" data-t="data">Exporter le CSV</button><button class="btn" data-act="sumclose">Fermer</button></div></section>' + adviceCard('Pour finir');
+    '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="bk">Sauvegarder mes données</button><button class="btn" data-act="tab" data-t="data">Exporter le CSV</button><button class="btn" data-act="sumclose">Fermer</button></div>' + (s.saved && s.entryId ? '<div class="row"><button class="btn" data-act="sresume" data-k="' + esc(s.entryId) + '">↩ Reprendre cette séance (terminée par erreur)</button></div>' : '') + '</section>' + adviceCard('Pour finir');
 }
 
 /* ---------- sauvegarde complète ---------- */
@@ -4333,6 +4346,8 @@ document.addEventListener('click', function (e) {
   else if (a === 'wabort') { if (S.confirm === 'abort') { S.active = null; saveActive(); unwake(); S.confirm = null; } else S.confirm = 'abort'; }
   else if (a === 'wfin') { finishWorkout(); if (S.summary && S.summary.saved && lsGet('cds.autobk') === '1') backupFile(); }
   else if (a === 'sumclose') S.summary = null;
+  else if (a === 'sresume') { var sri = -1; log.forEach(function (z, zi) { if (z.id === k) sri = zi; }); resumeEntry(sri); }
+  else if (a === 'hresume') { var hrs = model.sessions.filter(function (z) { return z.id === k; })[0]; resumeEntry(hrs ? logIdx(hrs) : -1); }
   else if (a === 'pexport') exportProfile();
   else if (a === 'pcopy') {
     var cd = profCode(PROFILE), okc = function () { S.msg = { t: 'Code copié : colle-le dans « Coller un code de profil » sur l\'autre appareil.' }; render(); }, nok = function () { S.msg = { t: 'Copie bloquée. Ton code : ' + cd }; render(); };
