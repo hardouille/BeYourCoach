@@ -11,7 +11,7 @@ var CFG = {
   messagingSenderId: '665931259732',
   appId: '1:665931259732:web:38cd5b80f526e7d15bf2c1'
 };
-var GCID = ''; /* identifiant client Web de Google (Firebase > Authentication > Google) */
+var GCID = '665931259732-0l70gi1r1gu6bjhgtvmhek6kuc06re0f.apps.googleusercontent.com'; /* identifiant client Web de Google (Firebase > Authentication > Google) */
 var VER = '10.14.1', CHUNK = 300000;
 var SKIP = { 'cds.nav': 1, 'cds.tab': 1, 'cds.active': 1, 'cds.ai': 1, 'cds.chat': 1, 'cds.lastbackup': 1,
   'cds.theme': 1, 'cds.snd': 1, 'cds.inst': 1, 'cds.legal': 1, 'cds.updated': 1, 'cds.autobk': 1 };
