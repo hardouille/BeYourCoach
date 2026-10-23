@@ -315,7 +315,7 @@ function ago(t) {
 function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
 function standalone() { try { return !!(navigator.standalone || window.matchMedia('(display-mode: standalone)').matches); } catch (e) { return false; } }
 
-API.card = function () {
+API.card = function (compact) {
   var h = '<section class="sec"><div class="lab">Compte et synchronisation</div><div class="drop">';
   var msg = ST.msg ? '<div class="msg' + (ST.status === 'err' ? ' err' : '') + '">' + esc(ST.msg) + '</div>' : '';
   if (ST.user) {
@@ -326,13 +326,14 @@ API.card = function () {
       (ST.confirmDel ? '<div class="msg err">Supprimer ton compte et toutes les données en ligne ? Les données de cet appareil restent.<div class="row"><button class="btn" data-act="sy-del">Oui, supprimer</button><button class="btn" data-act="sy-delno">Annuler</button></div></div>'
         : '<div class="row" style="flex-wrap:wrap"><button class="btn" data-act="sy-del">Supprimer mon compte en ligne</button></div>');
   } else {
-    h += '<div class="ename">Retrouve tes données sur tous tes appareils</div><div class="legend">Crée un compte (e-mail et mot de passe) ou connecte-toi. Tes données restent d\'abord sur cet appareil, puis une copie est gardée en ligne. Sur un nouvel appareil, connecte-toi pour tout récupérer.</div>' + msg +
+    h += (compact ? '' : '<div class="ename">Retrouve tes données sur tous tes appareils</div><div class="legend">Crée un compte (e-mail et mot de passe) ou connecte-toi. Tes données restent d\'abord sur cet appareil, puis une copie est gardée en ligne. Sur un nouvel appareil, connecte-toi pour tout récupérer.</div>') + msg +
       '<div id="sy-gbtn">' + '<div class="row"><button class="btn big" data-act="sy-g" style="flex:1;justify-content:center;height:48px;border-radius:999px;font-weight:600;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)"' + (ST.status === 'syncing' ? ' disabled' : '') + '><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:-3px;margin-right:8px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.500 0 11.900-2.100 15.900-5.800l-7.400-5.700c-2.100 1.400-4.800 2.300-8.500 2.300-6.300 0-11.600-4.100-13.500-9.800l-7.900 6.100C6.500 42.600 14.600 48 24 48z"/></svg>Continuer avec Google</button></div>' + '</div>' +
       '<div class="legend" style="text-align:center">ou avec ton e-mail</div>' +
       '<div class="row"><input class="fin" id="sy-mail" type="email" autocomplete="username" inputmode="email" value="' + esc(FORM.mail) + '" placeholder="E-mail" aria-label="E-mail" style="flex:1;min-width:0"></div>' +
       '<div class="row"><input class="fin" id="sy-pw" type="password" autocomplete="current-password" placeholder="Mot de passe (6 car. min.)" aria-label="Mot de passe" style="flex:1;min-width:0"></div>' +
       '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="sy-in"' + (ST.status === 'syncing' ? ' disabled' : '') + '>Se connecter</button><button class="btn" data-act="sy-up">Créer un compte</button><button class="btn" data-act="sy-rst">Mot de passe oublié</button></div>';
   }
+  if (compact) return h + '</div></section>';
   return h + '<details class="lg"><summary>Diagnostic</summary><pre class="why" style="white-space:pre-wrap;font-size:11px">' + esc(DBG.join('\n') || '(vide)') + '</pre></details></div></section>';
 };
 API.form = function () {
