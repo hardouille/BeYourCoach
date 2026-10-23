@@ -78,7 +78,7 @@ function init() {
       fb = window.firebase;
       if (!fb.apps.length) fb.initializeApp(CFG);
       auth = fb.auth(); db = fb.firestore();
-      try { if (auth.getRedirectResult) auth.getRedirectResult().catch(function (e) { set('err', errText(e)); }); } catch (e) {}
+      try { if (auth.getRedirectResult) auth.getRedirectResult().then(function (r) { if (!r || !r.user) { if (jget(K_USER).pending) del(K_USER); } }, function (e) { del(K_USER); set('err', errText(e)); }); } catch (e) {}
       ST.ready = true; ST.loading = false;
       auth.onAuthStateChanged(function (u) {
         if (u) {
@@ -86,7 +86,7 @@ function init() {
           var prev = jget(K_USER);
           if (prev.uid && prev.uid !== u.uid) { del(K_BASE); del(K_META); }
           put(K_USER, JSON.stringify({ uid: u.uid, email: u.email || '' }));
-          set('idle');
+          set('idle', 'Connecté : ' + (u.email || 'compte Google') + '. Synchronisation…');
           sync();
         } else { ST.user = null; if (ST.status === 'err' || ST.status === 'syncing') note(); else set('off', ST.msg); }
       });
@@ -201,7 +201,7 @@ function sync(force) {
       put(K_META, JSON.stringify(m2)); put(K_BASE, JSON.stringify(base));
       ST.last = Date.now(); put(K_LAST, String(ST.last));
       ST.busy = false;
-      set('ok', busy && pulls.length ? 'Séance en cours : les données reçues seront appliquées après.' : '');
+      set('ok', busy && pulls.length ? 'Séance en cours : les données reçues seront appliquées après.' : 'Connecté et synchronisé.');
       if (applied && !busy) {
         set('ok', 'Données mises à jour depuis ton compte…');
         setTimeout(function () { location.reload(); }, 700);
@@ -243,9 +243,9 @@ API.reset = function (mail) {
 API.google = function () {
   return run(function () {
     var pr = new fb.auth.GoogleAuthProvider();
-    if (standalone()) return auth.signInWithRedirect(pr);
+    if (standalone()) { put(K_USER, '{"pending":1}'); return auth.signInWithRedirect(pr); }
     return auth.signInWithPopup(pr).catch(function (e) {
-      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) return auth.signInWithRedirect(pr);
+      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) put(K_USER, '{"pending":1}'); return auth.signInWithRedirect(pr);
       throw e;
     });
   });
