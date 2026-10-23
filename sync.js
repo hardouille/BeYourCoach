@@ -245,7 +245,7 @@ API.google = function () {
     var pr = new fb.auth.GoogleAuthProvider();
     set('syncing', 'Ouverture de Google… Choisis ton compte dans la fenêtre qui s\'ouvre.');
     return auth.signInWithPopup(pr).catch(function (e) {
-      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) put(K_USER, '{"pending":1}'); return auth.signInWithRedirect(pr);
+      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) { put(K_USER, '{"pending":1}'); return auth.signInWithRedirect(pr); }
       throw e;
     });
   });
