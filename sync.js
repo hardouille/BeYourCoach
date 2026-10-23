@@ -231,7 +231,7 @@ function writeAll(list, remote) {
 
 /* ---------- actions ---------- */
 function run(fn) {
-  set('syncing');
+  set('syncing', 'Connexion en cours…');
   return init().then(fn).catch(function (e) { set('err', errText(e)); });
 }
 API.signIn = function (mail, pw) { return run(function () { return auth.signInWithEmailAndPassword(mail, pw); }); };
@@ -243,7 +243,7 @@ API.reset = function (mail) {
 API.google = function () {
   return run(function () {
     var pr = new fb.auth.GoogleAuthProvider();
-    if (standalone()) { put(K_USER, '{"pending":1}'); return auth.signInWithRedirect(pr); }
+    set('syncing', 'Ouverture de Google… Choisis ton compte dans la fenêtre qui s\'ouvre.');
     return auth.signInWithPopup(pr).catch(function (e) {
       if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) put(K_USER, '{"pending":1}'); return auth.signInWithRedirect(pr);
       throw e;
