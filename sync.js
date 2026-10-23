@@ -78,6 +78,7 @@ function init() {
       fb = window.firebase;
       if (!fb.apps.length) fb.initializeApp(CFG);
       auth = fb.auth(); db = fb.firestore();
+      try { if (auth.getRedirectResult) auth.getRedirectResult().catch(function (e) { set('err', errText(e)); }); } catch (e) {}
       ST.ready = true; ST.loading = false;
       auth.onAuthStateChanged(function (u) {
         if (u) {
@@ -240,7 +241,14 @@ API.reset = function (mail) {
   return run(function () { return auth.sendPasswordResetEmail(mail).then(function () { set(ST.user ? 'ok' : 'off', 'E-mail de réinitialisation envoyé à ' + mail + ' (regarde aussi les spams).'); }); });
 };
 API.google = function () {
-  return run(function () { return auth.signInWithPopup(new fb.auth.GoogleAuthProvider()); });
+  return run(function () {
+    var pr = new fb.auth.GoogleAuthProvider();
+    if (standalone()) return auth.signInWithRedirect(pr);
+    return auth.signInWithPopup(pr).catch(function (e) {
+      if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) return auth.signInWithRedirect(pr);
+      throw e;
+    });
+  });
 };
 API.signOut = function () {
   if (!auth) return Promise.resolve();
@@ -289,10 +297,11 @@ API.card = function () {
         : '<div class="row" style="flex-wrap:wrap"><button class="btn" data-act="sy-del">Supprimer mon compte en ligne</button></div>');
   } else {
     h += '<div class="ename">Retrouve tes données sur tous tes appareils</div><div class="legend">Crée un compte (e-mail et mot de passe) ou connecte-toi. Tes données restent d\'abord sur cet appareil, puis une copie est gardée en ligne. Sur un nouvel appareil, connecte-toi pour tout récupérer.</div>' + msg +
+      '<div class="row"><button class="btn big" data-act="sy-g" style="flex:1;justify-content:center"' + (ST.status === 'syncing' ? ' disabled' : '') + '><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:-3px;margin-right:8px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.500 0 11.900-2.100 15.900-5.800l-7.400-5.700c-2.100 1.400-4.800 2.300-8.500 2.300-6.300 0-11.600-4.100-13.500-9.800l-7.900 6.100C6.500 42.600 14.600 48 24 48z"/></svg>Continuer avec Google</button></div>' +
+      '<div class="legend" style="text-align:center">ou avec ton e-mail</div>' +
       '<div class="row"><input class="fin" id="sy-mail" type="email" autocomplete="username" inputmode="email" value="' + esc(FORM.mail) + '" placeholder="E-mail" aria-label="E-mail" style="flex:1;min-width:0"></div>' +
       '<div class="row"><input class="fin" id="sy-pw" type="password" autocomplete="current-password" placeholder="Mot de passe (6 car. min.)" aria-label="Mot de passe" style="flex:1;min-width:0"></div>' +
-      '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="sy-in"' + (ST.status === 'syncing' ? ' disabled' : '') + '>Se connecter</button><button class="btn" data-act="sy-up">Créer un compte</button></div>' +
-      '<div class="row" style="flex-wrap:wrap"><button class="btn" data-act="sy-rst">Mot de passe oublié</button>' + (standalone() ? '' : '<button class="btn" data-act="sy-g">Continuer avec Google</button>') + '</div>';
+      '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="sy-in"' + (ST.status === 'syncing' ? ' disabled' : '') + '>Se connecter</button><button class="btn" data-act="sy-up">Créer un compte</button><button class="btn" data-act="sy-rst">Mot de passe oublié</button></div>';
   }
   return h + '</div></section>';
 };

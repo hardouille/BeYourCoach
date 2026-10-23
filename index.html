@@ -3589,12 +3589,13 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.80';
+var APP_VER = 'v0.81';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
     '<h1>Bienvenue dans <span class="gtext">BeYourCoach</span></h1>' +
     '<p class="tag">Chaque séance compte. BeYourCoach s\'en souvient pour te faire progresser.</p>' +
+    (window.BYCSync ? BYCSync.card() : '') +
     '<p class="legend" style="margin-top:-6px">' + APP_VER + ' · bêta · <a href="#" data-act="upd">Vérifier les mises à jour</a></p><div class="chips" style="justify-content:center;align-items:center"><span class="legend" style="margin:0">Apparence</span>' + [['dark', 'Sombre'], ['light', 'Clair'], ['auto', 'Auto']].map(function (o) { return '<button class="chip" data-act="theme" data-v="' + o[0] + '" aria-pressed="' + ((lsGet('cds.theme') || 'dark') === o[0]) + '">' + o[1] + '</button>'; }).join('') + '</div>' +
     installCard(false) +
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
@@ -3604,7 +3605,6 @@ function viewHome() {
     '<label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label>' +
     '<button class="btn big' + (d ? '' : ' primary') + '" data-act="blank">Commencer un entraînement vierge</button></div>' +
     '<div class="coachnote"><b>Rien ne remplace un vrai coach.</b> BeYourCoach t\'accompagne à chaque séance, mais seul un coach peut corriger ton geste, t\'écouter et bâtir un programme vraiment sur mesure. Pour ta technique, une douleur ou un objectif précis, entoure-toi d\'un pro.</div>' +
-    (window.BYCSync ? BYCSync.card() : '') +
     '<p class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes.<br>Tes données restent sur cet appareil, sauf si tu te connectes à un compte pour les retrouver sur tes autres appareils.</p>' +
     '<button class="btn" data-act="editprofile">' + (prof() ? 'Mon profil' : 'Créer mon profil') + '</button>' + '<details><summary>Comment exporter mon historique ?</summary><div class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier avec « Importer ».</li></ol><div class="lab">Autres applis</div><ol class="how"><li><b>Strong :</b> Réglages, « Export Strong Data » (iPhone) ou « Export Data » (Android).</li><li><b>Fitbod :</b> onglet Log, roue crantée, « Export Workout Data ». Poids en livres.</li><li><b>JEFIT :</b> depuis le site jefit.com : My Jefit, Settings, Data Controls, Export Data.</li><li><b>FitNotes :</b> Réglages, sauvegarde, export tableur.</li></ol></div></details></section>';
 }
