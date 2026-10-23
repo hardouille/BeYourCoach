@@ -19,6 +19,8 @@ var rawSet = Storage.prototype.setItem, rawRem = Storage.prototype.removeItem, r
 var ST = { status: 'off', msg: '', user: null, last: 0, busy: false, confirmDel: false, ready: false, loading: false };
 var FORM = { mail: '', pw: '' };
 var fb = null, auth = null, db = null, applying = false, timer = null, again = false;
+var DBG = [];
+function dbg(m) { DBG.push(new Date().toLocaleTimeString('fr-FR') + ' ' + m); if (DBG.length > 14) DBG.shift(); }
 var API = { state: ST, onchange: null, isBusy: function () { return false; } };
 
 function get(k) { try { return rawGet.call(localStorage, k); } catch (e) { return null; } }
@@ -28,7 +30,7 @@ function jget(k) { try { var o = JSON.parse(get(k) || '{}'); return o && typeof 
 function syncable(k) { return typeof k === 'string' && k.indexOf('cds.') === 0 && k.indexOf('cds.sync.') !== 0 && !SKIP[k]; }
 function hash(s) { var h = 5381, i; for (i = 0; i < s.length; i++) h = ((h * 33) ^ s.charCodeAt(i)) | 0; return s.length + ':' + (h >>> 0); }
 function note() { try { if (API.onchange) API.onchange(); } catch (e) {} }
-function set(status, msg) { ST.status = status; ST.msg = msg || ''; note(); }
+function set(status, msg) { dbg(status + (msg ? ' : ' + msg : '')); ST.status = status; ST.msg = msg || ''; note(); }
 ST.last = +get(K_LAST) || 0;
 
 /* ---------- suivi des modifications locales ---------- */
@@ -75,12 +77,17 @@ function init() {
   ST.loading = (window.firebase ? Promise.resolve() :
     loadScript(base + 'app-compat.js').then(function () { return loadScript(base + 'auth-compat.js'); }).then(function () { return loadScript(base + 'firestore-compat.js'); }))
     .then(function () {
-      fb = window.firebase;
+      fb = window.firebase; dbg('SDK chargé');
       if (!fb.apps.length) fb.initializeApp(CFG);
       auth = fb.auth(); db = fb.firestore();
       try { if (auth.getRedirectResult) auth.getRedirectResult().then(function (r) { if (!r || !r.user) { if (jget(K_USER).pending) del(K_USER); } }, function (e) { del(K_USER); set('err', errText(e)); }); } catch (e) {}
       ST.ready = true; ST.loading = false;
-      auth.onAuthStateChanged(function (u) {
+      auth.onAuthStateChanged(function (u) { onUser(u); });
+    }, function (e) { ST.loading = false; dbg('SDK erreur ' + ((e && e.message) || e)); throw e; });
+  return ST.loading;
+}
+function onUser(u) {
+        dbg('utilisateur ' + (u ? u.email : 'aucun'));
         if (u) {
           ST.user = { uid: u.uid, email: u.email || '' };
           var prev = jget(K_USER);
@@ -89,9 +96,6 @@ function init() {
           set('idle', 'Connecté : ' + (u.email || 'compte Google') + '. Synchronisation…');
           sync();
         } else { ST.user = null; if (ST.status === 'err' || ST.status === 'syncing') note(); else set('off', ST.msg); }
-      });
-    }, function (e) { ST.loading = false; throw e; });
-  return ST.loading;
 }
 
 /* ---------- messages d'erreur ---------- */
@@ -244,7 +248,9 @@ API.google = function () {
   return run(function () {
     var pr = new fb.auth.GoogleAuthProvider();
     set('syncing', 'Ouverture de Google… Choisis ton compte dans la fenêtre qui s\'ouvre.');
-    return auth.signInWithPopup(pr).catch(function (e) {
+    dbg('popup Google');
+    return auth.signInWithPopup(pr).then(function (r) { dbg('popup ok ' + (r && r.user ? r.user.email : 'sans utilisateur')); if (r && r.user && !ST.user) onUser(r.user); }).catch(function (e) {
+      dbg('popup erreur ' + (e && (e.code || e.message)));
       if (e && (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment')) { put(K_USER, '{"pending":1}'); return auth.signInWithRedirect(pr); }
       throw e;
     });
@@ -254,6 +260,7 @@ API.signOut = function () {
   if (!auth) return Promise.resolve();
   return sync().then(function () { return auth.signOut(); }).then(function () { del(K_USER); del(K_BASE); del(K_META); ST.confirmDel = false; set('off'); });
 };
+API.dbg = dbg;
 API.syncNow = function () { return run(function () { return sync(true); }); };
 API.deleteAccount = function () {
   if (!ST.user) return Promise.resolve();
@@ -303,7 +310,7 @@ API.card = function () {
       '<div class="row"><input class="fin" id="sy-pw" type="password" autocomplete="current-password" placeholder="Mot de passe (6 car. min.)" aria-label="Mot de passe" style="flex:1;min-width:0"></div>' +
       '<div class="row" style="flex-wrap:wrap"><button class="btn primary" data-act="sy-in"' + (ST.status === 'syncing' ? ' disabled' : '') + '>Se connecter</button><button class="btn" data-act="sy-up">Créer un compte</button><button class="btn" data-act="sy-rst">Mot de passe oublié</button></div>';
   }
-  return h + '</div></section>';
+  return h + '<details class="lg"><summary>Diagnostic</summary><pre class="why" style="white-space:pre-wrap;font-size:11px">' + esc(DBG.join('\n') || '(vide)') + '</pre></details></div></section>';
 };
 API.form = function () {
   var m = document.getElementById('sy-mail'), p = document.getElementById('sy-pw');
