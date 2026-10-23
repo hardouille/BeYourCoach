@@ -3589,7 +3589,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.85';
+var APP_VER = 'v0.86';
 function viewHome() {
   var d = hasData();
   return '<section class="home"><img class="hlogo" src="' + window.LOGO_URI + '" alt="Logo BeYourCoach">' +
@@ -3693,7 +3693,7 @@ function render() {
   saveNav();
   var lg = $('blogo'); if (lg && !lg.getAttribute('src')) lg.setAttribute('src', window.LOGO_URI);
   if (S.onb) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewOnboarding(); return; }
-  if (S.home || (!hasData() && !S.active && !S.fresh)) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewHome(); return; }
+  if (S.home || (!hasData() && !S.active && !S.fresh)) { $('meta').textContent = ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewHome(); try { if (window.BYCSync) BYCSync.mount(); } catch (e) {} return; }
   if (!hasData() && !(prof() && !S.active)) { $('meta').textContent = S.active ? metaText() : ''; $('tabs').innerHTML = ''; $('view').innerHTML = viewSeance(); Anim.mount(); mountBody(); return; }
   var NOD = !hasData(), TB = NOD ? TABS.filter(function (t) { return t[0] !== 'progres' && t[0] !== 'histo'; }) : TABS;
   if (NOD && (S.tab === 'progres' || S.tab === 'histo')) S.tab = 'seance';
@@ -3704,6 +3704,7 @@ function render() {
   var q = $('q'), keep = q && document.activeElement === q ? q.selectionStart : -1;
   $('view').innerHTML = v;
   Anim.mount(); mountBody();
+  try { if (window.BYCSync) BYCSync.mount(); } catch (e) {}
   if (keep >= 0 && $('q')) { $('q').focus(); try { $('q').setSelectionRange(keep, keep); } catch (e) {} }
 }
 function go(t) { S.tab = t; lsSet('cds.tab', t); render(); window.scrollTo(0, 0); }
