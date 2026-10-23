@@ -246,6 +246,7 @@ API.reset = function (mail) {
   return run(function () { return auth.sendPasswordResetEmail(mail).then(function () { set(ST.user ? 'ok' : 'off', 'E-mail de réinitialisation envoyé à ' + mail + ' (regarde aussi les spams).'); }); });
 };
 API.google = function () {
+  if (tc && ST.ready) { set('syncing', 'Ouverture de Google… Choisis ton compte dans la fenêtre qui s\'ouvre.'); dbg('jeton Google demandé'); try { tc.requestAccessToken({ prompt: '' }); } catch (e) { set('err', 'Connexion Google impossible.'); } return Promise.resolve(); }
   return run(function () {
     var pr = new fb.auth.GoogleAuthProvider();
     set('syncing', 'Ouverture de Google… Choisis ton compte dans la fenêtre qui s\'ouvre.');
@@ -261,25 +262,26 @@ API.signOut = function () {
   if (!auth) return Promise.resolve();
   return sync().then(function () { return auth.signOut(); }).then(function () { del(K_USER); del(K_BASE); del(K_META); ST.confirmDel = false; set('off'); });
 };
-var gsiReady = false;
+var tc = null;
 API.mount = function () {
   var el = document.getElementById('sy-gbtn'); if (!el || !GCID) return;
-  function draw() {
+  function setup() {
+    if (tc) return;
     try {
-      if (!gsiReady) {
-        google.accounts.id.initialize({ client_id: GCID, ux_mode: 'popup', callback: function (r) {
-          dbg('Google : identifiant reçu');
-          run(function () { return auth.signInWithCredential(fb.auth.GoogleAuthProvider.credential(r.credential)); });
-        } });
-        gsiReady = true;
-      }
-      el.innerHTML = '';
-      google.accounts.id.renderButton(el, { type: 'standard', theme: 'outline', size: 'large', text: 'continue_with', shape: 'rectangular', locale: 'fr', width: Math.min(360, Math.max(200, el.clientWidth || 300)) });
-    } catch (e) { dbg('Google bouton erreur ' + (e && e.message)); }
+      tc = google.accounts.oauth2.initTokenClient({
+        client_id: GCID, scope: 'openid email profile',
+        callback: function (r) {
+          if (!r || r.error || !r.access_token) { dbg('Google : ' + ((r && r.error) || 'pas de jeton')); set('err', 'Connexion Google annulée ou refusée.'); return; }
+          dbg('Google : jeton reçu');
+          run(function () { return auth.signInWithCredential(fb.auth.GoogleAuthProvider.credential(null, r.access_token)); });
+        },
+        error_callback: function (e) { dbg('Google erreur ' + (e && e.type)); set('err', e && e.type === 'popup_closed' ? 'Connexion annulée.' : e && e.type === 'popup_failed_to_open' ? 'Le navigateur a bloqué la fenêtre Google.' : 'Connexion Google impossible.'); }
+      });
+    } catch (e) { dbg('Google init erreur ' + (e && e.message)); }
   }
   init().catch(function () {});
-  if (window.google && window.google.accounts) draw();
-  else loadScript('https://accounts.google.com/gsi/client').then(draw, function () { dbg('Google indisponible'); el.innerHTML = '<div class="legend">Connexion Google indisponible hors ligne.</div>'; });
+  if (window.google && window.google.accounts && window.google.accounts.oauth2) setup();
+  else loadScript('https://accounts.google.com/gsi/client').then(setup, function () { dbg('Google indisponible'); });
 };
 API.dbg = dbg;
 API.syncNow = function () { return run(function () { return sync(true); }); };
@@ -325,7 +327,7 @@ API.card = function () {
         : '<div class="row" style="flex-wrap:wrap"><button class="btn" data-act="sy-del">Supprimer mon compte en ligne</button></div>');
   } else {
     h += '<div class="ename">Retrouve tes données sur tous tes appareils</div><div class="legend">Crée un compte (e-mail et mot de passe) ou connecte-toi. Tes données restent d\'abord sur cet appareil, puis une copie est gardée en ligne. Sur un nouvel appareil, connecte-toi pour tout récupérer.</div>' + msg +
-      (GCID ? '<div id="sy-gbtn" style="display:flex;justify-content:center;min-height:44px"></div>' : '<div class="row"><button class="btn big" data-act="sy-g" style="flex:1;justify-content:center"' + (ST.status === 'syncing' ? ' disabled' : '') + '><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:-3px;margin-right:8px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.500 0 11.900-2.100 15.900-5.800l-7.400-5.700c-2.100 1.400-4.800 2.300-8.500 2.300-6.300 0-11.600-4.100-13.500-9.800l-7.900 6.100C6.500 42.600 14.600 48 24 48z"/></svg>Continuer avec Google</button></div>') +
+      '<div id="sy-gbtn">' + '<div class="row"><button class="btn big" data-act="sy-g" style="flex:1;justify-content:center;height:48px;border-radius:999px;font-weight:600;font-size:15px;box-shadow:0 1px 3px rgba(0,0,0,.18)"' + (ST.status === 'syncing' ? ' disabled' : '') + '><svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true" style="vertical-align:-3px;margin-right:8px"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.8-6.8C35.8 2.4 30.3 0 24 0 14.6 0 6.5 5.4 2.6 13.2l7.9 6.1C12.4 13.6 17.7 9.5 24 9.5z"/><path fill="#4285F4" d="M46.1 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.4c-.5 2.9-2.2 5.3-4.6 6.9l7.4 5.7c4.3-4 6.9-9.9 6.9-17.1z"/><path fill="#FBBC05" d="M10.5 28.7c-.5-1.4-.8-2.9-.8-4.7s.3-3.3.8-4.7l-7.9-6.1C.9 16.4 0 20.1 0 24s.9 7.6 2.6 10.8l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.500 0 11.900-2.100 15.900-5.800l-7.400-5.700c-2.100 1.400-4.800 2.300-8.500 2.300-6.300 0-11.600-4.100-13.500-9.800l-7.900 6.100C6.500 42.600 14.600 48 24 48z"/></svg>Continuer avec Google</button></div>' + '</div>' +
       '<div class="legend" style="text-align:center">ou avec ton e-mail</div>' +
       '<div class="row"><input class="fin" id="sy-mail" type="email" autocomplete="username" inputmode="email" value="' + esc(FORM.mail) + '" placeholder="E-mail" aria-label="E-mail" style="flex:1;min-width:0"></div>' +
       '<div class="row"><input class="fin" id="sy-pw" type="password" autocomplete="current-password" placeholder="Mot de passe (6 car. min.)" aria-label="Mot de passe" style="flex:1;min-width:0"></div>' +
