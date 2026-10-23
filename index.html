@@ -3624,7 +3624,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.89';
+var APP_VER = 'v0.90';
 function homeStreak() {
   var w = C.weekly(model, now(), 104), k = w.length - 1, n = 0;
   if (k >= 0 && !w[k].sessions) k--;
@@ -3776,7 +3776,7 @@ function render() {
   try { if (window.BYCSync) BYCSync.mount(); } catch (e) {}
   if (keep >= 0 && $('q')) { $('q').focus(); try { $('q').setSelectionRange(keep, keep); } catch (e) {} }
 }
-function go(t) { S.home = false; S.tab = t; lsSet('cds.tab', t); render(); window.scrollTo(0, 0); }
+function go(t) { S.home = false; S.tab = t; lsSet('cds.tab', t); render(); window.scrollTo(0, 0); try { requestAnimationFrame(function () { window.scrollTo(0, 0); setTimeout(function () { window.scrollTo(0, 0); }, 60); }); } catch (e) {} }
 
 /* ---------- entraînement en cours ---------- */
 var wl = null;
