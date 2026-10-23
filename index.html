@@ -91,6 +91,17 @@ button { cursor: pointer; }
 .lastc { display: flex; justify-content: space-between; align-items: center; gap: 10px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 14px; text-align: left; color: var(--ink); width: 100%; }
 .lastc small { display: block; color: var(--muted); font-size: 12px; }
 .lastc .go { color: var(--accent); flex: none; }
+
+.w7days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.w7d { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.w7d i { font-style: normal; width: 100%; height: 26px; border-radius: 8px; background: var(--bg); border: 1px solid var(--line); display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--accent-ink); }
+.w7d.on i { background: var(--grad); border-color: transparent; }
+.w7d span { font-size: 11px; color: var(--muted); }
+.w7r { display: grid; grid-template-columns: 92px 1fr 28px; gap: 8px; align-items: center; font-size: 13px; }
+.w7n { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.w7b { height: 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); overflow: hidden; }
+.w7b i { display: block; height: 100%; background: var(--grad); border-radius: 999px; }
+.w7v { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .hlogo.sm { width: 84px; margin: 0 auto; border-radius: 22.5%; }
 .newu h1, .newu .tag { text-align: center; align-self: center; }
 .step { display: flex; gap: 12px; align-items: flex-start; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 14px; text-align: left; }
@@ -2869,7 +2880,24 @@ function viewHisto() {
   var n = now(), all = model.sessions, ws = C.weekly(model, n, 1)[0];
   var mo = all.filter(function (se) { return n - se.t < 30 * 864e5; }).length;
   var top = '<section class="sec"><div><h2>Mes séances</h2></div><div class="strip"><div class="stat"><b>' + all.length + '</b><span>séances au total</span></div><div class="stat"><b>' + (ws ? ws.sessions : 0) + '</b><span>cette semaine</span></div><div class="stat"><b>' + mo + '</b><span>sur 30 jours</span></div></div></section>';
-  return top + historySection();
+  return top + week7Chart() + historySection();
+}
+function week7Chart() {
+  var n = now(), DAY = 864e5, from = n - 7 * DAY, ms = {}, days = [0, 0, 0, 0, 0, 0, 0], tot = 0, ns = 0;
+  model.sessions.forEach(function (se) {
+    if (se.t < from || se.t > n + DAY) return;
+    ns++;
+    Object.keys(se.ms).forEach(function (m) { ms[m] = (ms[m] || 0) + se.ms[m]; tot += se.ms[m]; });
+    var k = 6 - Math.min(6, Math.floor((n - se.t) / DAY)); days[k]++;
+  });
+  var rows = Object.keys(ms).sort(function (a, b) { return ms[b] - ms[a]; }), mx = rows.length ? ms[rows[0]] : 1;
+  var dl = [], i; for (i = 6; i >= 0; i--) { var d = new Date(n - i * DAY); dl.push(['D', 'L', 'M', 'M', 'J', 'V', 'S'][d.getUTCDay()]); }
+  var strip = '<div class="w7days">' + days.map(function (c, k) { return '<div class="w7d' + (c ? ' on' : '') + '"><i>' + (c || '') + '</i><span>' + dl[k] + '</span></div>'; }).join('') + '</div>';
+  var body = rows.length ? rows.map(function (m) {
+    return '<div class="w7r"><span class="w7n">' + esc(m) + '</span><span class="w7b"><i style="width:' + Math.max(4, Math.round(ms[m] / mx * 100)) + '%"></i></span><span class="w7v">' + ms[m] + '</span></div>';
+  }).join('') : '<p class="legend">Aucune séance sur les 7 derniers jours.</p>';
+  return '<section class="sec"><div class="card"><div class="lab">7 derniers jours</div><div class="ename">' + ns + ' séance' + (ns > 1 ? 's' : '') + ' · ' + tot + ' série' + (tot > 1 ? 's' : '') + '</div>' + strip +
+    '<div class="legend" style="margin:2px 0 0">Séries par muscle</div>' + body + '</div></section>';
 }
 function logIdx(se) { for (var i = 0; i < log.length; i++) if (log[i].title + '|' + C.fmtFR(log[i].start) === se.id) return i; return -1; }
 function syncHe() {
@@ -3624,7 +3652,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.90';
+var APP_VER = 'v0.91';
 function homeStreak() {
   var w = C.weekly(model, now(), 104), k = w.length - 1, n = 0;
   if (k >= 0 && !w[k].sessions) k--;
