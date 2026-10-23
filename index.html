@@ -3652,7 +3652,7 @@ function detail(X, st, n) {
     (X.bw ? '' : '<div class="legend">e1RM : estimation du maximum sur 1 répétition, charge × (1 + reps / 30), meilleure série de chaque séance.</div>') + ficheToggle(X.name) + '</div>';
 }
 
-var APP_VER = 'v0.91';
+var APP_VER = 'v0.92';
 function homeStreak() {
   var w = C.weekly(model, now(), 104), k = w.length - 1, n = 0;
   if (k >= 0 && !w[k].sessions) k--;
@@ -3683,7 +3683,7 @@ function viewHome() {
     '<details><summary>Comment exporter mon historique ?</summary><div class="sec"><div class="lab">Exporter depuis Hevy</div><ol class="how"><li>Ouvre Hevy, onglet Profil, puis les réglages.</li><li>Choisis « Exporter et importer les données ».</li><li>Touche « Exporter les données », puis « Exporter les entraînements ».</li><li>Reviens ici et choisis le fichier avec « Importer ».</li></ol><div class="lab">Autres applis</div><ol class="how"><li><b>Strong :</b> Réglages, « Export Strong Data » (iPhone) ou « Export Data » (Android).</li><li><b>Fitbod :</b> onglet Log, roue crantée, « Export Workout Data ». Poids en livres.</li><li><b>JEFIT :</b> depuis le site jefit.com : My Jefit, Settings, Data Controls, Export Data.</li><li><b>FitNotes :</b> Réglages, sauvegarde, export tableur.</li></ol></div></details>' + '</section>';
 }
 function viewDash() {
-  var n = now(), hr = new Date(n).getUTCHours(), hello = hr < 6 || hr >= 18 ? 'Bonsoir' : 'Bonjour';
+  var n = now(), hr = new Date(n).getUTCHours(), hello = hr < 6 || hr >= 18 ? 'Bonsoir' : 'Bonjour', who = (lsGet('cds.name') || '').trim(); if (who) hello += ' ' + who;
   var dt = new Date(n).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
   var sts = {}; C.MUSCLES.forEach(function (m) { sts[m] = C.muscleStatus(model, m, n); });
   var tp = S.active ? null : todayPick(sts);
@@ -3713,10 +3713,14 @@ function legalCard() {
     '<details class="lg"><summary>Sources et crédits</summary><p class="why">Les vidéos appartiennent à leurs auteurs et sont lues dans le lecteur officiel de YouTube ; la chaîne est indiquée sous chaque vidéo. Les animations 3D en boucle viennent de Vital Animations (licence commerciale). Les modèles 3D animés viennent de Sketchfab (auteur : Mike - 3D Muscle Model) et sont affichés dans la visionneuse officielle de Sketchfab, qui se charge quand tu touches le bouton 3D ; Sketchfab peut alors recevoir ton adresse IP. Les photos d\'exercices viennent de free-exercise-db (domaine public). Les silhouettes de l\'onglet Séance (face et dos) viennent de « Anatomy study 2.0 Basemesh Human Male Body » par zeroran et « female muscle human body » par mina (Sketchfab, licence CC BY 4.0), modifiés (vues 2D colorées). Les marques citées (Hevy, Strong, Fitbod, JEFIT, FitNotes, YouTube) appartiennent à leurs propriétaires, et BeYourCoach n\'est affilié à aucune d\'elles.</p></details>' +
     '</section>';
 }
+function nameCard() {
+  return '<section class="sec"><div class="card"><div class="lab">Mon prénom</div><div class="row"><input class="fin" id="nm" type="text" maxlength="24" autocomplete="given-name" placeholder="Ton prénom (affiché sur l\'accueil)" aria-label="Prénom" value="' + esc(lsGet('cds.name') || '') + '" style="flex:1;min-width:0"></div></div></section>';
+}
+document.addEventListener('input', function (e) { if (e.target && e.target.id === 'nm') { var v = e.target.value.trim().slice(0, 24); if (v) lsSet('cds.name', v); else lsDel('cds.name'); } });
 function viewData() {
   var first = C.fmtDateY(model.first), last = C.fmtDateY(model.last);
   var exN = Object.keys(model.ex).length;
-  return profileCard() + '<section class="sec"><div><h2>Données</h2><p class="sub">' + model.sessions.length + ' séances, ' + exN + ' exercices, du ' + first + ' au ' + last + '.</p></div>' +
+  return nameCard() + profileCard() + '<section class="sec"><div><h2>Données</h2><p class="sub">' + model.sessions.length + ' séances, ' + exN + ' exercices, du ' + first + ' au ' + last + '.</p></div>' +
     (S.msg ? '<div class="msg' + (S.msg.err ? ' err' : '') + '">' + esc(S.msg.t) + '</div>' : '') +
     '<div class="card">' + themeRow() + '</div>' + installCard(true) + '<div class="drop"><div class="ename">Mettre à jour avec un nouvel export</div><label class="btn big">Choisir un fichier CSV<input id="file" type="file" hidden accept=".csv,text/csv,text/plain"></label><label class="legend lbrow"><input id="lb" type="checkbox"> Mon fichier est en livres (lb)</label><div class="legend">Compatible Hevy, Strong, Fitbod, JEFIT et FitNotes. Le fichier reste dans ce navigateur. Il remplace les données actuelles.</div>' +
     (seedCSV.trim() ? '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : effacer aussi mes nouvelles séances' : 'Revenir aux données d\'origine') + '</button></div>' : '<div><button class="btn" data-act="reset">' + (S.confirm === 'reset' ? 'Confirmer : tout effacer' : 'Effacer mes données') + '</button></div>') + '</div></section>' +
